@@ -597,7 +597,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden border-t border-blue-50 dark:border-slate-700/50 pt-6"
                     >
-                      <div className="flex gap-2 mb-6 border-b border-blue-100 dark:border-slate-700 pb-2 overflow-x-auto touch-pan-x scrollbar-hide">
+                      <div className="flex gap-2 mb-6 border-b border-blue-100 dark:border-slate-700 pb-2 overflow-x-auto touch-pan-x scrollbar-hide no-swipe">
                         {['chapters', 'bookmarks', 'notes', 'autoGoal'].map(tab => (
                           <button 
                             key={tab}

@@ -275,7 +275,7 @@ export default function Statistics({ sessions, realTimeAddedSeconds = 0, weeklyP
               <h2 className="text-2xl font-black text-blue-900 dark:text-white mb-2 shrink-0">이번 주 요일표</h2>
               <p className="text-sm font-medium text-blue-400 dark:text-slate-400 mb-6 shrink-0">목표 대비 공부 시간과 일일 목표를 보여줍니다.</p>
 
-              <div className="overflow-x-auto pb-6 pt-4 -mx-2 px-2 snap-x snap-mandatory [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] flex-1 min-h-[300px]">
+              <div className="no-swipe overflow-x-auto pb-6 pt-4 -mx-2 px-2 snap-x snap-mandatory [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] flex-1 min-h-[300px]">
                 <div className="flex gap-4 w-max min-w-full h-full">
                   {weekDays.map((day, idx) => {
                     const isToday = isSameDay(day.date, now);

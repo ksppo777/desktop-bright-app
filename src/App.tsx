@@ -310,6 +310,48 @@ export default function App() {
     };
   }, [cloudSyncPayload, isAllLoaded]);
 
+  const touchStartRef = useRef<{ x: number, y: number } | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartRef.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY
+    };
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndY = e.changedTouches[0].clientY;
+
+    const dx = touchEndX - touchStartRef.current.x;
+    const dy = touchEndY - touchStartRef.current.y;
+
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 60) {
+      const target = e.target as HTMLElement;
+      if (
+        target.closest('.no-swipe') || 
+        target.closest('input') || 
+        target.closest('textarea') || 
+        Math.abs(dy) > 50
+      ) {
+        touchStartRef.current = null;
+        return;
+      }
+      
+      const tabIds = navItems.map(item => item.id);
+      const currentIndex = tabIds.indexOf(activeTab);
+      
+      if (dx > 0) {
+        setActiveTab(tabIds[currentIndex > 0 ? currentIndex - 1 : tabIds.length - 1] as any);
+      } else if (dx < 0) {
+        setActiveTab(tabIds[currentIndex < tabIds.length - 1 ? currentIndex + 1 : 0] as any);
+      }
+    }
+    
+    touchStartRef.current = null;
+  };
+
   const navItems = [
     { id: 'home', label: '홈', icon: HomeIcon },
     { id: 'plan', label: '오늘 계획', icon: Target },
@@ -333,7 +375,11 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-slate-100 transition-colors">
+    <div 
+      className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-slate-100 transition-colors"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       <header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-700/50 flex items-center justify-between sticky top-0 z-40 transition-colors">
         <div className="max-w-5xl mx-auto px-4 sm:px-8 h-20 w-full flex items-center justify-between gap-4 sm:gap-6">
           <div className="flex items-center gap-3 cursor-pointer shrink-0" onClick={() => setActiveTab('home')}>
@@ -342,7 +388,7 @@ export default function App() {
               Bright Study
             </h1>
           </div>
-          <nav className="flex gap-1 bg-slate-100/50 dark:bg-slate-900/50 p-1.5 rounded-full border border-slate-200/50 dark:border-slate-700/50 max-w-full overflow-x-auto touch-pan-x scrollbar-hide">
+          <nav className="flex gap-1 bg-slate-100/50 dark:bg-slate-900/50 p-1.5 rounded-full border border-slate-200/50 dark:border-slate-700/50 max-w-full overflow-x-auto touch-pan-x scrollbar-hide no-swipe">
             {navItems.map(item => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
