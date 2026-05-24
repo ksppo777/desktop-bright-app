@@ -302,7 +302,7 @@ export default function Settings({ isDarkMode, setIsDarkMode, onDataSync, getAll
             수동 데이터 저장
           </h3>
           <p className="text-sm font-medium text-blue-400 dark:text-slate-400">
-            모든 데이터는 기기 및 클라우드에 자동 저장되지만, 원할 때 수동으로 저장할 수 있습니다.
+            모든 데이터는 기기 및 클라우드에 자동 저장되지만, 원할 때 기기에 수동으로 저장할 수 있습니다.
           </p>
         </div>
         <button
@@ -320,8 +320,8 @@ export default function Settings({ isDarkMode, setIsDarkMode, onDataSync, getAll
             <Cloud className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-xl font-bold text-blue-900 dark:text-white">클라우드 동기화 (Firebase)</h3>
-            <p className="text-sm font-medium text-blue-400 dark:text-slate-400">Firestore에 학습 기록을 저장하고 여러 기기에서 이어가세요.</p>
+            <h3 className="text-xl font-bold text-blue-900 dark:text-white">구글 클라우드 동기화</h3>
+            <p className="text-sm font-medium text-blue-400 dark:text-slate-400">Google Firestore에 학습 기록을 저장하고 여러 기기에서 이어가세요.</p>
           </div>
         </div>
 
@@ -365,14 +365,14 @@ export default function Settings({ isDarkMode, setIsDarkMode, onDataSync, getAll
                 disabled={isSyncing}
                 className="flex items-center justify-center gap-2 p-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl font-bold transition-colors"
                >
-                <Upload className="w-5 h-5" /> 현재 기기 데이터를 Firebase에 백업
+                <Upload className="w-5 h-5" /> 클라우드 백업하기
               </button>
               <button 
                 onClick={handleDownload} 
                 disabled={isSyncing}
                 className="flex items-center justify-center gap-2 p-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-xl font-bold transition-colors"
               >
-                <Download className="w-5 h-5" /> Firebase에서 데이터 가져오기
+                <Download className="w-5 h-5" /> 클라우드 가져오기
               </button>
             </div>
             <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 space-y-2">
@@ -383,6 +383,9 @@ export default function Settings({ isDarkMode, setIsDarkMode, onDataSync, getAll
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 자동 백업은 최신본을 유지하면서 스냅샷 여러 개를 남겨 실수 삭제 후에도 이전 상태로 복원할 수 있습니다.
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                자동 백업 스냅샷은 최근 10개만 유지되며, 수동 백업 스냅샷은 별도로 남아 복원 선택 가능합니다.
               </p>
             </div>
             <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/20 p-4 space-y-3">
