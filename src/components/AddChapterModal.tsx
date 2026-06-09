@@ -1,4 +1,5 @@
 import { useState, FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Plus, List } from 'lucide-react';
 import { Book } from '../types';
 
@@ -10,6 +11,7 @@ interface AddChapterModalProps {
 }
 
 export default function AddChapterModal({ isOpen, book, onClose, onAdd }: AddChapterModalProps) {
+  const { t } = useTranslation();
   const [title, setTitle] = useState('');
   const [startPage, setStartPage] = useState('');
   const [endPage, setEndPage] = useState('');
@@ -30,7 +32,7 @@ export default function AddChapterModal({ isOpen, book, onClose, onAdd }: AddCha
       <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl w-full max-w-md border border-slate-100 dark:border-slate-700 animate-in fade-in zoom-in-95 duration-200">
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2">
-             <List className="w-5 h-5 text-indigo-500" /> 목차 추가하기
+             <List className="w-5 h-5 text-indigo-500" /> {t('chapterModal.title')}
           </h3>
           <button 
             onClick={onClose}
@@ -46,10 +48,10 @@ export default function AddChapterModal({ isOpen, book, onClose, onAdd }: AddCha
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 block">챕터(목차) 이름</label>
+            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 block">{t('chapterModal.chapterName')}</label>
             <input 
               type="text" 
-              placeholder="예: 1단원. 조세총론"
+              placeholder={t('chapterModal.chapterNamePlaceholder')}
               value={title}
               onChange={e => setTitle(e.target.value)}
               className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -58,11 +60,11 @@ export default function AddChapterModal({ isOpen, book, onClose, onAdd }: AddCha
           </div>
           
           <div>
-            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 block">페이지 범위</label>
+            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 block">{t('chapterModal.pageRange')}</label>
             <div className="flex items-center gap-3">
               <input 
                 type="number" 
-                placeholder="시작 (예: 1)"
+                placeholder={t('chapterModal.pageStartPlaceholder')}
                 value={startPage}
                 onChange={e => setStartPage(e.target.value)}
                 className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center"
@@ -70,7 +72,7 @@ export default function AddChapterModal({ isOpen, book, onClose, onAdd }: AddCha
               <span className="text-slate-400 font-bold">~</span>
               <input 
                 type="number" 
-                placeholder="끝 (예: 26)"
+                placeholder={t('chapterModal.pageEndPlaceholder')}
                 value={endPage}
                 onChange={e => setEndPage(e.target.value)}
                 className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center"
@@ -80,10 +82,10 @@ export default function AddChapterModal({ isOpen, book, onClose, onAdd }: AddCha
 
           <div className="pt-2 flex gap-3">
              <button type="button" onClick={onClose} className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 font-bold rounded-xl transition-colors">
-               완료
+               {t('chapterModal.done')}
              </button>
              <button type="submit" disabled={!title.trim() || !startPage || !endPage} className="flex-1 py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm">
-               <Plus className="w-4 h-4" /> 추가하기
+               <Plus className="w-4 h-4" /> {t('chapterModal.add')}
              </button>
           </div>
         </form>

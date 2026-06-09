@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { Book, Chapter } from '../types';
 
@@ -11,6 +12,7 @@ interface QuickAddModalProps {
 }
 
 export default function QuickAddModal({ isOpen, onClose, onAdd, book, chapter }: QuickAddModalProps) {
+  const { t } = useTranslation();
   const [startPage, setStartPage] = useState(chapter.startPage);
   const [endPage, setEndPage] = useState(chapter.endPage);
   const [isFullChapter, setIsFullChapter] = useState(false);
@@ -42,7 +44,7 @@ export default function QuickAddModal({ isOpen, onClose, onAdd, book, chapter }:
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 dark:bg-slate-900/80 backdrop-blur-sm">
       <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-2xl w-full max-w-sm border border-slate-100 dark:border-slate-700 animate-in fade-in zoom-in-95 duration-200">
         <div className="flex justify-between items-center mb-6">
-          <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">목표 범위 설정</h3>
+          <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">{t('quickAdd.title')}</h3>
           <button 
             onClick={onClose}
             className="text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 w-8 h-8 rounded-full flex items-center justify-center transition-colors"
@@ -64,7 +66,7 @@ export default function QuickAddModal({ isOpen, onClose, onAdd, book, chapter }:
               onChange={(e) => handleToggleFull(e.target.checked)}
               className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
             />
-            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">전체 학습</span>
+            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{t('quickAdd.fullStudy')}</span>
           </label>
 
           <div className="flex items-center gap-3">
@@ -95,13 +97,13 @@ export default function QuickAddModal({ isOpen, onClose, onAdd, book, chapter }:
             onClick={onClose}
             className="flex-1 px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
           >
-            취소
+            {t('common.cancel')}
           </button>
           <button 
             onClick={handleAdd}
             className="flex-1 px-4 py-2 bg-indigo-500 text-white font-bold rounded-xl hover:bg-indigo-600 transition-colors shadow-sm"
           >
-            추가
+            {t('quickAdd.add')}
           </button>
         </div>
       </div>

@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
-import { Target, Book as BookIcon, Clock, Plus, Trash2, X, CalendarDays, RotateCcw, Divide } from 'lucide-react';
+import { Target, Book as BookIcon, Clock, Plus, Trash2, X, CalendarDays, RotateCcw, Divide, MoreVertical, Edit2 } from 'lucide-react';
 import { Book, Chapter } from '../types';
 import { useLocalStorage, cn } from '../lib/utils';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface TodayPlanProps {
   dailyGoalMinutes: number;
@@ -24,6 +26,8 @@ export interface TimeSlotGoal {
   startPage: number;
   endPage: number;
   memo: string;
+  isAutoSynced?: boolean;
+  isManualAdded?: boolean;
 }
 
 export interface TimeBlock {
@@ -34,11 +38,14 @@ export interface TimeBlock {
 }
 
 export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWeeklyPlans, books, setActiveTab, autoGoalDisplayMode, dateStr }: TodayPlanProps) {
+  const { t } = useTranslation();
   const targetDateStr = dateStr || format(new Date(), 'yyyy-MM-dd');
   const isToday = targetDateStr === format(new Date(), 'yyyy-MM-dd');
 
   const [timetableRecords, setTimetableRecords] = useLocalStorage<Record<string, TimeSlotGoal[]>>('study-timetable-records', {});
-  const todayGoals = timetableRecords[targetDateStr] || [];
+  
+  const EMPTY_ARRAYRef = useRef<TimeSlotGoal[]>([]);
+  const todayGoals = timetableRecords[targetDateStr] || EMPTY_ARRAYRef.current;
 
   const [globalWakeTimeRaw, setGlobalWakeTimeRaw] = useLocalStorage<string | number>('study-wake-hour', 8);
   const [globalSleepTimeRaw, setGlobalSleepTimeRaw] = useLocalStorage<string | number>('study-sleep-hour', 23);
@@ -76,6 +83,7 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
   const [startPage, setStartPage] = useState('');
   const [endPage, setEndPage] = useState('');
   const [memo, setMemo] = useState('');
+  const [activeGoalMenuId, setActiveGoalMenuId] = useState<string | null>(null);
 
   // Sync to weeklyPlans for Calendar
   useEffect(() => {
@@ -87,7 +95,7 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
        return;
     }
     
-    const grouped: Record<string, { start: number, end: number }> = {};
+    const grouped: Record<string, { start: number, end: number, isAutoSynced: boolean, isManualAdded?: boolean }> = {};
     const memoList: string[] = [];
     
     todayGoals.forEach(g => {
@@ -95,13 +103,21 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
        if (g.bookId && g.chapterId) {
          const key = `${g.bookId}|${g.chapterId}`;
          if (!grouped[key]) {
-           grouped[key] = { start: g.startPage, end: g.endPage };
+           grouped[key] = { start: g.startPage, end: g.endPage, isAutoSynced: !!g.isAutoSynced, isManualAdded: !!g.isManualAdded };
          } else {
            grouped[key].start = Math.min(grouped[key].start, g.startPage);
            grouped[key].end = Math.max(grouped[key].end, g.endPage);
+           grouped[key].isAutoSynced = grouped[key].isAutoSynced || !!g.isAutoSynced;
+           grouped[key].isManualAdded = grouped[key].isManualAdded || !!g.isManualAdded;
          }
        } else if (g.memo) {
-         memoList.push(`[${timeLabel}] ${g.memo}`);
+         if (g.isAutoSynced) {
+            memoList.push(`⚡ [${timeLabel}] ${g.memo}`);
+         } else if (g.isManualAdded) {
+            memoList.push(`📝 [${timeLabel}] ${g.memo}`);
+         } else {
+            memoList.push(`[${timeLabel}] ${g.memo}`);
+         }
        }
     });
     
@@ -111,7 +127,12 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
       const book = books.find(b => b.id === bId);
       const chapter = book?.chapters.find(c => c.id === cId);
       if (book && chapter) {
-         lines.push(`[${book.title}] ${chapter.title} (p.${range.start}~${range.end})`);
+         const prefix = range.isAutoSynced ? '⚡ ' : (range.isManualAdded ? '📝 ' : '');
+         if (range.start === 0 && range.end === 0) {
+           lines.push(`${prefix}[${book.title}] ${chapter.title}`);
+         } else {
+           lines.push(`${prefix}[${book.title}] ${chapter.title} (p.${range.start}~${range.end})`);
+         }
       }
     }
     
@@ -337,17 +358,17 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
             <Target className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-1">오늘의 학습 계획</h3>
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">타임테이블을 설정하고 목표를 기입하세요.</p>
+            <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-1">{t('todayPlan.title')}</h3>
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{t('todayPlan.subtitle')}</p>
           </div>
         </div>
 
         <div className="space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 block">하루 목표 공부 시간</label>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
+              <label className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 block">{t('todayPlan.dailyGoalLabel')}</label>
+              <div className="flex items-center gap-1.5 sm:gap-4 w-full">
+                <div className="flex items-center gap-1 sm:gap-2 shrink-1">
                   <input
                     type="number"
                     min="0"
@@ -359,11 +380,11 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
                         setDailyGoalMinutes(h * 60 + (dailyGoalMinutes % 60));
                       }
                     }}
-                    className="w-20 px-3 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-lg font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center"
+                    className="w-12 sm:w-20 px-1 sm:px-3 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-base sm:text-lg font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center"
                   />
-                  <span className="text-slate-500 font-bold">시간</span>
+                  <span className="text-slate-500 font-bold whitespace-nowrap text-xs sm:text-base">{t('todayPlan.hoursLabel')}</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 sm:gap-2 shrink-1">
                   <input
                     type="number"
                     min="0"
@@ -375,9 +396,9 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
                         setDailyGoalMinutes(Math.floor(dailyGoalMinutes / 60) * 60 + m);
                       }
                     }}
-                    className="w-20 px-3 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-lg font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center"
+                    className="w-12 sm:w-20 px-1 sm:px-3 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-base sm:text-lg font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center"
                   />
-                  <span className="text-slate-500 font-bold">분</span>
+                  <span className="text-slate-500 font-bold whitespace-nowrap text-xs sm:text-base">{t('todayPlan.minutesLabel')}</span>
                 </div>
               </div>
             </div>
@@ -395,18 +416,18 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
                         <div key={autoGoal.id} className={cn("flex justify-between items-center relative z-10", idx > 0 ? "pt-4 border-t border-white/20" : "")}>
                           <div className="flex flex-col">
                             <span className="text-[10px] font-bold text-red-100 uppercase tracking-widest mb-0.5 flex items-center gap-1">
-                              <Target className="w-3 h-3 text-orange-200" /> 일일 도전 목표
+                              <Target className="w-3 h-3 text-orange-200" /> {t('todayPlan.dailyChallengeTitle')}
                             </span>
                             <span className="font-bold text-sm truncate max-w-[150px] mb-1">{book.title}</span>
                             <div className="flex items-baseline gap-1">
                               <span className="text-2xl font-black tracking-tight">{autoGoal.dailyPages}</span>
-                              <span className="text-xs font-bold text-red-100">p / 일</span>
+                              <span className="text-xs font-bold text-red-100">{t('todayPlan.pagesPerDay')}</span>
                             </div>
                           </div>
                           <button 
                             onClick={() => setActiveTab('books')}
                             className="bg-white/10 hover:bg-white/20 transition-colors p-2.5 rounded-xl cursor-pointer self-start shrink-0"
-                            title="진도 관리로 이동"
+                            title={t('todayPlan.goToProgressManagement')}
                           >
                             <BookIcon className="w-4 h-4 text-white" />
                           </button>
@@ -422,18 +443,18 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
                         
                         <div className="flex flex-col relative z-10">
                           <span className="text-[10px] font-bold text-red-100 uppercase tracking-widest mb-0.5 flex items-center gap-1">
-                            <Target className="w-3 h-3 text-orange-200" /> 일일 도전 목표
+                            <Target className="w-3 h-3 text-orange-200" /> {t('todayPlan.dailyChallengeTitle')}
                           </span>
                           <span className="font-bold text-sm truncate max-w-[150px] mb-1">{book.title}</span>
                           <div className="flex items-baseline gap-1">
                             <span className="text-2xl font-black tracking-tight">{autoGoal.dailyPages}</span>
-                            <span className="text-xs font-bold text-red-100">p / 일</span>
+                            <span className="text-xs font-bold text-red-100">{t('todayPlan.pagesPerDay')}</span>
                           </div>
                         </div>
                         <button 
                           onClick={() => setActiveTab('books')}
                           className="relative z-10 bg-white/20 hover:bg-white/30 transition-colors p-2.5 rounded-xl cursor-pointer"
-                          title="진도 관리로 이동"
+                          title={t('todayPlan.goToProgressManagement')}
                         >
                           <BookIcon className="w-5 h-5 text-white" />
                         </button>
@@ -446,11 +467,11 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
               <div className="flex flex-col gap-4 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
                 <div className="flex items-center gap-3">
                    <Clock className="w-4 h-4 text-indigo-500" />
-                   <span className="text-sm font-bold text-slate-700 dark:text-slate-300">내 생활 패턴</span>
+                   <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{t('todayPlan.lifestyleTitle')}</span>
                 </div>
-                <div className="flex items-center gap-4">
-                  <div className="flex-1">
-                    <label className="text-xs font-bold text-slate-500 block mb-1">기상 시간</label>
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  <div className="flex-1 w-full sm:w-auto">
+                    <label className="text-xs font-bold text-slate-500 block mb-1">{t('todayPlan.wakeTimeLabel')}</label>
                     <select value={wakeTime} onChange={e => handleWakeChange(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1.5 text-sm font-bold text-slate-700 dark:text-slate-200">
                       {Array.from({length:48}).map((_, i) => {
                         const h = Math.floor(i / 2);
@@ -460,8 +481,8 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
                       })}
                     </select>
                   </div>
-                  <div className="flex-1">
-                    <label className="text-xs font-bold text-slate-500 block mb-1">취침 시간</label>
+                  <div className="flex-1 w-full sm:w-auto">
+                    <label className="text-xs font-bold text-slate-500 block mb-1">{t('todayPlan.sleepTimeLabel')}</label>
                     <select value={sleepTime} onChange={e => handleSleepChange(e.target.value)} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1.5 text-sm font-bold text-slate-700 dark:text-slate-200">
                       {Array.from({length:49}).map((_, i) => {
                         const h = Math.floor(i / 2);
@@ -479,10 +500,10 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
           <div>
              <div className="flex items-center justify-between mb-4">
                <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                 <CalendarDays className="w-4 h-4 text-indigo-500" /> 오늘 타임테이블
+                 <CalendarDays className="w-4 h-4 text-indigo-500" /> {t('todayPlan.todayTimetableTitle')}
                </h4>
                <button onClick={handleResetTimetable} className="text-xs font-bold text-slate-500 hover:text-rose-600 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-rose-50 hover:border-rose-200 dark:hover:bg-rose-500/20 px-3 py-1.5 rounded-lg border transition-colors flex items-center gap-1.5 shadow-sm">
-                 <RotateCcw className="w-3.5 h-3.5" /> 초기화
+                 <RotateCcw className="w-3.5 h-3.5" /> {t('todayPlan.resetButton')}
                </button>
              </div>
              <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden divide-y divide-slate-200 dark:divide-slate-700/50">
@@ -505,26 +526,78 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
                            <div className="pr-8 h-full flex flex-col justify-center relative">
                              {bookObj && chapterObj ? (
                                <div className="flex flex-col">
-                                 <span className="text-xs font-bold text-indigo-500 dark:text-indigo-400 mb-0.5">[{bookObj.title}]</span>
+                                 <div className="flex items-center gap-1 mb-0.5">
+                                   {goal.isAutoSynced && <span title={t('todayPlan.autoSyncedRecordTitle')} className="text-xs">⚡</span>}
+                                   {goal.isManualAdded && <span title={t('todayPlan.manualAddedRecordTitle')} className="text-xs">📝</span>}
+                                   <span className="text-xs font-bold text-indigo-500 dark:text-indigo-400">[{bookObj.title}]</span>
+                                 </div>
                                  <span className="text-sm font-bold text-slate-800 dark:text-slate-200">{chapterObj.title}</span>
-                                 <span className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1 font-mono">p.{goal.startPage} ~ p.{goal.endPage} ({(goal.endPage - goal.startPage) + 1}쪽)</span>
+                                 {goal.startPage !== 0 || goal.endPage !== 0 ? (
+                                   <span className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1 font-mono">
+                                      {t('todayPlan.pageRangeSummary', { start: goal.startPage, end: goal.endPage, pagesCount: (goal.endPage - goal.startPage) + 1 })}
+                                   </span>
+                                 ) : null}
                                </div>
                              ) : (
-                               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{goal.memo}</span>
+                               <div className="flex items-center gap-1">
+                                 {goal.isAutoSynced && <span title={t('todayPlan.autoSyncedRecordTitle')} className="text-xs">⚡</span>}
+                                 {goal.isManualAdded && <span title={t('todayPlan.manualAddedRecordTitle')} className="text-xs">📝</span>}
+                                 <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{goal.memo}</span>
+                               </div>
                              )}
-                             <button onClick={(e) => { e.stopPropagation(); handleDeleteGoal(block.id); }} className="absolute right-0 top-1/2 -translate-y-1/2 p-2 text-slate-300 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all">
-                                <Trash2 className="w-4 h-4" />
-                             </button>
+                             <div className="absolute right-0 top-1/2 -translate-y-1/2 z-10">
+                               <button 
+                                 onClick={(e) => { 
+                                   e.stopPropagation(); 
+                                   setActiveGoalMenuId(activeGoalMenuId === block.id ? null : block.id); 
+                                 }} 
+                                 className="p-2 text-slate-400 hover:text-blue-500 dark:text-slate-500 dark:hover:text-blue-400 transition-all rounded-md"
+                               >
+                                  <MoreVertical className="w-5 h-5" />
+                               </button>
+                               <AnimatePresence>
+                                 {activeGoalMenuId === block.id && (
+                                   <motion.div
+                                     initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                                     animate={{ opacity: 1, scale: 1, y: 0 }}
+                                     exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                                     transition={{ duration: 0.15 }}
+                                     className="absolute right-0 top-10 mt-1 w-28 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-100 dark:border-slate-700 py-1 z-20"
+                                   >
+                                     <button
+                                       onClick={(e) => {
+                                         e.stopPropagation();
+                                         setActiveGoalMenuId(null);
+                                         openEditModal(block.id, `${block.startTime} ~ ${block.endTime}`);
+                                       }}
+                                       className="w-full text-left px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-2"
+                                     >
+                                       <Edit2 className="w-4 h-4" /> {t('todayPlan.editButton')}
+                                     </button>
+                                     <button
+                                       onClick={(e) => {
+                                         e.stopPropagation();
+                                         handleDeleteGoal(block.id);
+                                         setActiveGoalMenuId(null);
+                                       }}
+                                       className="w-full text-left px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
+                                     >
+                                       <Trash2 className="w-4 h-4" /> {t('todayPlan.deleteButton')}
+                                     </button>
+                                   </motion.div>
+                                 )}
+                               </AnimatePresence>
+                             </div>
                            </div>
                          ) : (
-                           <div className="h-full w-full flex items-center text-slate-300 dark:text-slate-600 font-bold text-xs opacity-0 group-hover:opacity-100 transition-opacity">
-                             <Plus className="w-4 h-4 mr-1" /> 계획 추가
+                           <div className="h-full w-full flex items-center text-slate-400 dark:text-slate-500 font-bold text-xs transition-colors group-hover:text-slate-600 dark:group-hover:text-slate-400">
+                             <Plus className="w-4 h-4 mr-1" /> {t('todayPlan.addPlan')}
                            </div>
                          )}
                        </div>
 
                        <div className="w-16 sm:w-20 shrink-0 flex flex-col items-center justify-center p-2 border-l border-slate-100 dark:border-slate-700/50">
-                         <button onClick={(e) => { e.stopPropagation(); handleSplit(idx); }} className="w-full py-2 bg-slate-50 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-500 dark:text-slate-300 rounded-lg transition-colors text-[10px] sm:text-xs font-bold border border-slate-200 dark:border-slate-600 shadow-sm flex items-center justify-center gap-1" title="분할">
+                         <button onClick={(e) => { e.stopPropagation(); handleSplit(idx); }} className="w-full py-2 bg-slate-50 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-500 dark:text-slate-300 rounded-lg transition-colors text-[10px] sm:text-xs font-bold border border-slate-200 dark:border-slate-600 shadow-sm flex items-center justify-center gap-1" title={t('todayPlan.splitTitle')}>
                            <Divide className="w-3.5 h-3.5" />
                          </button>
                        </div>
@@ -532,7 +605,7 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
 
                      {idx < todayLayout.length - 1 && (
                        <div className="absolute left-[3rem] sm:left-[3.5rem] -bottom-[15px] -translate-x-1/2 z-10 pointer-events-auto">
-                         <button onClick={(e) => { e.stopPropagation(); handleMerge(idx); }} className="w-[30px] h-[30px] bg-white dark:bg-slate-800 border-[1.5px] border-slate-200 dark:border-slate-600 rounded-full flex items-center justify-center shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-400 group/merge" title="다음 시간대와 합치기">
+                         <button onClick={(e) => { e.stopPropagation(); handleMerge(idx); }} className="w-[30px] h-[30px] bg-white dark:bg-slate-800 border-[1.5px] border-slate-200 dark:border-slate-600 rounded-full flex items-center justify-center shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-400 group/merge" title={t('todayPlan.mergeTitle')}>
                            <Plus className="w-4 h-4 transition-transform group-hover/merge:scale-110" />
                          </button>
                        </div>
@@ -550,7 +623,7 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
           <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-2xl w-full max-w-md border border-slate-100 dark:border-slate-700 animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                <Clock className="w-5 h-5 text-indigo-500" /> {editingBlockLabel} 학습 계획
+                <Clock className="w-5 h-5 text-indigo-500" /> {t('todayPlan.editStudyPlanTitle', { timeRange: editingBlockLabel })}
               </h3>
               <button onClick={() => setEditingBlockId(null)} className="text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 w-8 h-8 rounded-full flex items-center justify-center transition-colors">
                 <X className="w-5 h-5" />
@@ -559,16 +632,16 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
 
             <div className="space-y-4">
               <div>
-                <label className="text-xs font-bold text-slate-500 block mb-1">교재 선택</label>
+                <label className="text-xs font-bold text-slate-500 block mb-1">{t('todayPlan.bookSelectLabel')}</label>
                 <select value={selectedBookId} onChange={e => { setSelectedBookId(e.target.value); setSelectedChapterId(''); }} className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 dark:text-slate-200">
-                  <option value="">교재 선택 (직접 입력은 선택 안함)</option>
+                  <option value="">{t('todayPlan.bookSelectPlaceholder')}</option>
                   {books.map(b => <option key={b.id} value={b.id}>{b.title}</option>)}
                 </select>
               </div>
 
               {selectedBookId && (
                 <div>
-                  <label className="text-xs font-bold text-slate-500 block mb-1">챕터 / 목차</label>
+                  <label className="text-xs font-bold text-slate-500 block mb-1">{t('todayPlan.chapterLabel')}</label>
                   <select value={selectedChapterId} onChange={e => {
                     const chapterId = e.target.value;
                     setSelectedChapterId(chapterId);
@@ -583,7 +656,7 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
                       setEndPage('');
                     }
                   }} className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 dark:text-slate-200">
-                    <option value="">챕터 선택...</option>
+                    <option value="">{t('todayPlan.chapterSelectPlaceholder')}</option>
                     {books.find(b => b.id === selectedBookId)?.chapters.map(c => <option key={c.id} value={c.id}>{c.title} (p.{c.startPage}~{c.endPage})</option>)}
                   </select>
                 </div>
@@ -591,29 +664,29 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
 
               {selectedChapterId && (
                 <div>
-                  <label className="text-xs font-bold text-slate-500 block mb-1">학습할 페이지 범위 (선택)</label>
+                  <label className="text-xs font-bold text-slate-500 block mb-1">{t('todayPlan.pageRangeLabel')}</label>
                   <div className="flex items-center gap-3">
-                    <input type="number" placeholder="1" value={startPage} onChange={e => setStartPage(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-center text-sm font-bold text-slate-700 dark:text-slate-200" />
+                    <input type="number" placeholder={t('todayPlan.pageStartPlaceholder')} value={startPage} onChange={e => setStartPage(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-center text-sm font-bold text-slate-700 dark:text-slate-200" />
                     <span className="text-slate-400 font-bold">~</span>
-                    <input type="number" placeholder="26" value={endPage} onChange={e => setEndPage(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-center text-sm font-bold text-slate-700 dark:text-slate-200" />
+                    <input type="number" placeholder={t('todayPlan.pageEndPlaceholder')} value={endPage} onChange={e => setEndPage(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-center text-sm font-bold text-slate-700 dark:text-slate-200" />
                   </div>
                 </div>
               )}
 
               {!selectedBookId && (
                 <div>
-                  <label className="text-xs font-bold text-slate-500 block mb-1">내용 직접 입력</label>
-                  <textarea value={memo} onChange={e => setMemo(e.target.value)} placeholder="예: 영어 단어 50개 암기" className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-200 resize-none min-h-[80px] focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+                  <label className="text-xs font-bold text-slate-500 block mb-1">{t('todayPlan.manualMemoLabel')}</label>
+                  <textarea value={memo} onChange={e => setMemo(e.target.value)} placeholder={t('todayPlan.manualMemoPlaceholder')} className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-200 resize-none min-h-[80px] focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
                 </div>
               )}
             </div>
 
             <div className="mt-6 flex gap-3">
               <button onClick={() => setEditingBlockId(null)} className="flex-1 px-4 py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
-                취소
+                {t('common.cancel')}
               </button>
               <button onClick={handleSaveGoal} className="flex-1 px-4 py-3 bg-indigo-500 text-white font-bold rounded-xl hover:bg-indigo-600 transition-colors shadow-md shadow-indigo-200 dark:shadow-none">
-                저장
+                {t('common.save')}
               </button>
             </div>
           </div>
@@ -623,13 +696,13 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
       {showResetConfirm && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/50 dark:bg-slate-900/80 backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-full max-w-sm border border-slate-100 dark:border-slate-700 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-            <h3 className="text-lg font-bold mb-3 text-slate-800 dark:text-slate-100">타임테이블 초기화</h3>
+            <h3 className="text-lg font-bold mb-3 text-slate-800 dark:text-slate-100">{t('todayPlan.resetConfirmTitle')}</h3>
             <p className="text-slate-600 dark:text-slate-400 mb-6 text-sm leading-relaxed">
-              타임테이블 시간 구분 설정과 기입한 목표가 모두 기상~취침 기본값으로 초기화됩니다.<br/><br/>계속하시겠습니까?
+              {t('todayPlan.resetConfirmBody')}<br/><br/>{t('todayPlan.resetConfirmQuestion')}
             </p>
             <div className="flex gap-3">
               <button onClick={() => setShowResetConfirm(false)} className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
-                취소
+                {t('common.cancel')}
               </button>
               <button onClick={() => {
                 setDailyLayouts(prev => {
@@ -644,7 +717,7 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
                 });
                 setShowResetConfirm(false);
               }} className="flex-1 py-2.5 bg-rose-500 text-white font-bold rounded-xl hover:bg-rose-600 transition-colors">
-                초기화
+                {t('todayPlan.resetButton')}
               </button>
             </div>
           </div>

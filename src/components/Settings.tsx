@@ -1,39 +1,96 @@
-import { useState, useEffect } from 'react';
-import { initAuth, googleSignIn, logout } from '../lib/auth';
-import { CloudBackupSnapshot, deleteCloudBackupSnapshot, getCloudBackupSnapshots, getCloudSyncErrorMessage, restoreCloudBackupSnapshot, syncDataToCloud, syncDataFromCloud } from '../lib/cloudSync';
-import { User } from 'firebase/auth';
-import { Cloud, Check, Download, Upload, LogOut, Moon, Sun, Target, MessageCircle, Type, AlignLeft, RotateCcw, Trash2 } from 'lucide-react';
-import { clearStorage, setStorage } from '../lib/storage';
-import { cn } from '../lib/utils';
-import { motion } from 'motion/react';
+import { useState, useEffect } from "react";
+import { useTranslation } from 'react-i18next';
+import { initAuth, googleSignIn, logout, User } from "../lib/auth";
+import { syncToDrive, syncFromDrive, getDriveSyncMetadata } from "../lib/driveSync";
+import { getIsLogMode, setIsLogModeConfig, clearLogs, exportLogsStr } from "../lib/logger";
+import {
+  Cloud,
+  Check,
+  Download,
+  Upload,
+  LogOut,
+  Moon,
+  Sun,
+  Target,
+  MessageCircle,
+  Type,
+  AlignLeft,
+} from "lucide-react";
+import { clearStorage, setStorage } from "../lib/storage";
+import { cn } from "../lib/utils";
+import { motion } from "motion/react";
 
 interface SettingsProps {
   isDarkMode: boolean;
   setIsDarkMode: (val: boolean) => void;
-  onDataSync: (data: any) => void;
+  onDataSync: (data: any, newTimestamp: number) => void;
   getAllData: () => any;
-  autoGoalDisplayMode: 'multiple' | 'single';
-  setAutoGoalDisplayMode: (val: 'multiple' | 'single') => void;
+  autoGoalDisplayMode: "multiple" | "single";
+  setAutoGoalDisplayMode: (val: "multiple" | "single") => void;
   globalFontSize: number;
   setGlobalFontSize: (val: number | ((prev: number) => number)) => void;
   preventWordWrap: boolean;
   setPreventWordWrap: (val: boolean) => void;
   showNavLabelsMobile: boolean;
   setShowNavLabelsMobile: (val: boolean) => void;
+  hideHeroText: boolean;
+  setHideHeroText: (val: boolean | ((prev: boolean) => boolean)) => void;
   autoBackupStatus: string;
   lastAutoBackupAt: string | null;
+  localDataTimestamp: number;
+  syncNetworkPreference: "all" | "wifi_only";
+  setSyncNetworkPreference: (val: "all" | "wifi_only") => void;
+  language: string | null;
+  setLanguage: (val: string) => void;
 }
 
-export default function Settings({ isDarkMode, setIsDarkMode, onDataSync, getAllData, autoGoalDisplayMode, setAutoGoalDisplayMode, globalFontSize, setGlobalFontSize, preventWordWrap, setPreventWordWrap, showNavLabelsMobile, setShowNavLabelsMobile, autoBackupStatus, lastAutoBackupAt }: SettingsProps) {
+export default function Settings({
+  isDarkMode,
+  setIsDarkMode,
+  onDataSync,
+  getAllData,
+  autoGoalDisplayMode,
+  setAutoGoalDisplayMode,
+  globalFontSize,
+  setGlobalFontSize,
+  preventWordWrap,
+  setPreventWordWrap,
+  showNavLabelsMobile,
+  setShowNavLabelsMobile,
+  hideHeroText,
+  setHideHeroText,
+  autoBackupStatus,
+  lastAutoBackupAt,
+  localDataTimestamp,
+  syncNetworkPreference,
+  setSyncNetworkPreference,
+  language,
+  setLanguage,
+}: SettingsProps) {
+  const { t } = useTranslation();
   const [user, setUser] = useState<User | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
-  const [backupSnapshots, setBackupSnapshots] = useState<CloudBackupSnapshot[]>([]);
-  const [isLoadingSnapshots, setIsLoadingSnapshots] = useState(false);
+  const [isLogMode, setIsLogMode] = useState(getIsLogMode());
+  const [remoteDataTimestamp, setRemoteDataTimestamp] = useState<number | null>(null);
+  const [isFetchingRemoteDate, setIsFetchingRemoteDate] = useState(false);
 
   const showTemporaryStatus = (message: string, duration = 4000) => {
     setSyncStatus(message);
     window.setTimeout(() => setSyncStatus(null), duration);
+  };
+
+  const refreshRemoteTimestamp = async () => {
+    if (!user) return;
+    try {
+      setIsFetchingRemoteDate(true);
+      const ts = await getDriveSyncMetadata();
+      setRemoteDataTimestamp(ts);
+    } catch {
+      // Ignore
+    } finally {
+      setIsFetchingRemoteDate(false);
+    }
   };
 
   useEffect(() => {
@@ -45,24 +102,7 @@ export default function Settings({ isDarkMode, setIsDarkMode, onDataSync, getAll
   }, []);
 
   useEffect(() => {
-    const loadSnapshots = async () => {
-      if (!user) {
-        setBackupSnapshots([]);
-        return;
-      }
-
-      setIsLoadingSnapshots(true);
-      try {
-        const snapshots = await getCloudBackupSnapshots();
-        setBackupSnapshots(snapshots);
-      } catch (error) {
-        showTemporaryStatus(`백업 목록 불러오기 실패: ${getCloudSyncErrorMessage(error)}`, 6000);
-      } finally {
-        setIsLoadingSnapshots(false);
-      }
-    };
-
-    loadSnapshots();
+    refreshRemoteTimestamp();
   }, [user]);
 
   const handleLogin = async () => {
@@ -70,80 +110,38 @@ export default function Settings({ isDarkMode, setIsDarkMode, onDataSync, getAll
       const res = await googleSignIn();
       if (res) setUser(res.user);
     } catch (e: any) {
-      if (e.code !== 'auth/cancelled-popup-request' && e.code !== 'auth/popup-closed-by-user') {
-        console.error(e);
-        alert('로그인에 실패했습니다.');
-      }
+      console.error(e);
+      try { window.alert(t('settings.sync.loginFailed')); } catch(err) {}
     }
   };
 
   const handleUpload = async () => {
-    if (!confirm('현재 기기의 데이터를 클라우드에 백업합니다. 진행하시겠습니까?')) return;
     setIsSyncing(true);
-    setSyncStatus('Firebase에 백업 중...');
+    setSyncStatus(t('settings.sync.uploading'));
     try {
       const data = getAllData();
-      await syncDataToCloud(data, 'manual');
-      const snapshots = await getCloudBackupSnapshots();
-      setBackupSnapshots(snapshots);
-      showTemporaryStatus('Firebase 백업 완료!');
-    } catch (e) {
-      showTemporaryStatus(`백업 실패: ${getCloudSyncErrorMessage(e)}`, 6000);
+      await syncToDrive(data, Date.now());
+      showTemporaryStatus(t('settings.sync.uploadComplete'));
+    } catch (e: any) {
+      showTemporaryStatus(t('settings.sync.uploadFailed', { message: e.message }), 6000);
     } finally {
       setIsSyncing(false);
     }
   };
 
   const handleDownload = async () => {
-    if (!confirm('클라우드에 저장된 데이터로 기기 데이터를 덮어씁니다. 진행하시겠습니까?')) return;
     setIsSyncing(true);
-    setSyncStatus('Firebase에서 불러오는 중...');
+    setSyncStatus(t('settings.sync.downloading'));
     try {
-      const data = await syncDataFromCloud();
-      if (data) {
-        onDataSync(data);
-        showTemporaryStatus('Firebase 복원 완료!');
+      const res = await syncFromDrive();
+      if (res && res.data) {
+        onDataSync(res.data, res.timestamp);
+        showTemporaryStatus(t('settings.sync.downloadComplete'));
       } else {
-        showTemporaryStatus('저장된 Firebase 백업이 없습니다.');
+        showTemporaryStatus(t('settings.sync.noData'));
       }
-    } catch (e) {
-      showTemporaryStatus(`복원 실패: ${getCloudSyncErrorMessage(e)}`, 6000);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const handleRestoreSnapshot = async (snapshotId: string) => {
-    if (!confirm('선택한 백업으로 현재 기기 데이터를 덮어씁니다. 진행하시겠습니까?')) return;
-
-    setIsSyncing(true);
-    setSyncStatus('선택한 백업을 복원하는 중...');
-    try {
-      const data = await restoreCloudBackupSnapshot(snapshotId);
-      if (data) {
-        onDataSync(data);
-        showTemporaryStatus('선택한 백업으로 복원 완료!');
-      } else {
-        showTemporaryStatus('선택한 백업에 데이터가 없습니다.');
-      }
-    } catch (error) {
-      showTemporaryStatus(`선택 백업 복원 실패: ${getCloudSyncErrorMessage(error)}`, 6000);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const handleDeleteSnapshot = async (snapshotId: string) => {
-    if (!confirm('선택한 백업 스냅샷을 삭제합니다. 진행하시겠습니까?')) return;
-
-    setIsSyncing(true);
-    setSyncStatus('백업 스냅샷을 삭제하는 중...');
-    try {
-      await deleteCloudBackupSnapshot(snapshotId);
-      setBackupSnapshots((prev: CloudBackupSnapshot[]) => prev.filter((snapshot: CloudBackupSnapshot) => snapshot.id !== snapshotId));
-      showTemporaryStatus('백업 스냅샷 삭제 완료!');
-    } catch (error) {
-      showTemporaryStatus(`백업 스냅샷 삭제 실패: ${getCloudSyncErrorMessage(error)}`, 6000);
+    } catch (e: any) {
+      showTemporaryStatus(t('settings.sync.downloadFailed', { message: e.message }), 6000);
     } finally {
       setIsSyncing(false);
     }
@@ -163,353 +161,387 @@ export default function Settings({ isDarkMode, setIsDarkMode, onDataSync, getAll
       await Promise.all(
         Object.entries(data).map(([key, value]) => setStorage(key, value))
       );
-      alert('모든 데이터가 현재 기기에 안전하게 저장되었습니다!');
+      try { window.alert(t('settings.localSave.saved')); } catch (e) {}
     } catch (error) {
-      console.error('수동 저장 실패', error);
-      alert('수동 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+      console.error(t('settings.localSave.manualSaveError'), error);
+      try { window.alert(t('settings.localSave.manualSaveError')); } catch (e) {}
     }
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-8 pb-12">
-      {/* Dark Mode & Theme Settings */}
-      <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-xl shadow-blue-900/5 dark:shadow-none border border-blue-50 dark:border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h3 className="text-xl font-bold text-blue-900 dark:text-white flex items-center gap-2 mb-2">
-            {isDarkMode ? <Moon className="w-6 h-6 text-indigo-400" /> : <Sun className="w-6 h-6 text-orange-400" />}
-            화면 테마
-          </h3>
-          <p className="text-sm font-medium text-blue-400 dark:text-slate-400">눈이 편안한 테마를 설정해보세요.</p>
+    <div className="flex flex-col gap-4 pb-20">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
+          <h2 className="text-[13px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">{t('settings.display.title')}</h2>
         </div>
-        <button
-          onClick={() => setIsDarkMode(!isDarkMode)}
-          className="flex items-center gap-2 px-6 py-3 bg-blue-50 dark:bg-slate-700 text-blue-600 dark:text-white rounded-xl font-bold transition-colors hover:bg-blue-100 dark:hover:bg-slate-600"
-        >
-          {isDarkMode ? '밝은 테마로 변경' : '어두운 테마로 변경'}
-        </button>
-      </div>
-
-      {/* Font Size Settings */}
-      <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-xl shadow-blue-900/5 dark:shadow-none border border-blue-50 dark:border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h3 className="text-xl font-bold text-blue-900 dark:text-white flex items-center gap-2 mb-2">
-            <Type className="w-6 h-6 text-slate-500" />
-            글자 크기 조절
-          </h3>
-          <p className="text-sm font-medium text-blue-400 dark:text-slate-400">
-            화면의 전체적인 글자 크기를 키우거나 줄입니다.
-          </p>
-        </div>
-        <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-700/50 p-2 rounded-2xl border border-slate-100 dark:border-slate-600">
-           <button 
-             onClick={() => setGlobalFontSize(s => Math.max(10, s - 1))}
-             className="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold shadow-sm flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-700 transition"
-           >
-             -
-           </button>
-           <span className="font-bold text-slate-800 dark:text-white w-12 text-center text-lg">{globalFontSize}px</span>
-           <button 
-             onClick={() => setGlobalFontSize(s => Math.min(24, s + 1))}
-             className="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold shadow-sm flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-700 transition"
-           >
-             +
-           </button>
-        </div>
-      </div>
-
-      {/* Prevent Word Wrap Settings */}
-      <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-xl shadow-blue-900/5 dark:shadow-none border border-blue-50 dark:border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h3 className="text-xl font-bold text-blue-900 dark:text-white flex items-center gap-2 mb-2">
-            <AlignLeft className="w-6 h-6 text-indigo-500" />
-            글자 짤림 방지
-          </h3>
-          <p className="text-sm font-medium text-blue-400 dark:text-slate-400">
-            화면이 좁을 때 단어 중간에 줄바꿈이 일어나는 것을 방지합니다.
-          </p>
-        </div>
-        <label className="relative inline-flex items-center cursor-pointer shrink-0">
-          <input 
-            type="checkbox" 
-            className="sr-only peer" 
-            checked={preventWordWrap} 
-            onChange={(e) => setPreventWordWrap(e.target.checked)} 
-          />
-          <div className="w-14 h-8 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-indigo-500"></div>
-          <span className="ml-3 text-sm font-bold text-slate-600 dark:text-slate-300">
-            {preventWordWrap ? 'ON' : 'OFF'}
-          </span>
-        </label>
-      </div>
-
-      {/* Mobile Nav Settings */}
-      <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-xl shadow-blue-900/5 dark:shadow-none border border-blue-50 dark:border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h3 className="text-xl font-bold text-blue-900 dark:text-white flex items-center gap-2 mb-2">
-            <Target className="w-6 h-6 text-indigo-500" />
-            작은 화면 상단 메뉴 표시
-          </h3>
-          <p className="text-sm font-medium text-blue-400 dark:text-slate-400">
-            화면이 좁을 때 아이콘만 보이지 않고 메뉴명도 표시합니다. (좌우로 스와이프하여 탐색할 수 있습니다.)
-          </p>
-        </div>
-        <label className="relative inline-flex items-center cursor-pointer shrink-0">
-          <input 
-            type="checkbox" 
-            className="sr-only peer" 
-            checked={showNavLabelsMobile} 
-            onChange={(e) => setShowNavLabelsMobile(e.target.checked)} 
-          />
-          <div className="w-14 h-8 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-indigo-500"></div>
-          <span className="ml-3 text-sm font-bold text-slate-600 dark:text-slate-300">
-            {showNavLabelsMobile ? 'ON' : 'OFF'}
-          </span>
-        </label>
-      </div>
-
-      {/* Auto Goal Display Mode */}
-      <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-xl shadow-blue-900/5 dark:shadow-none border border-blue-50 dark:border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h3 className="text-xl font-bold text-blue-900 dark:text-white flex items-center gap-2 mb-2">
-            <Target className="w-6 h-6 text-red-500" />
-            자동 도전 표시 설정
-          </h3>
-          <p className="text-sm font-medium text-blue-400 dark:text-slate-400">
-            진행중인 자동 도전이 여러개일 때 어떤 방식으로 표시할지 설정합니다.
-          </p>
-        </div>
-        <div className="flex bg-slate-100 dark:bg-slate-700 p-1 rounded-xl">
-          <button
-            onClick={() => setAutoGoalDisplayMode('multiple')}
-            className={cn("px-4 py-2 font-bold text-sm rounded-lg transition-colors", autoGoalDisplayMode === 'multiple' ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200")}
-          >
-            개별 블록 표시
-          </button>
-          <button
-            onClick={() => setAutoGoalDisplayMode('single')}
-            className={cn("px-4 py-2 font-bold text-sm rounded-lg transition-colors", autoGoalDisplayMode === 'single' ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200")}
-          >
-            하나의 블록에 분할 표시
-          </button>
-        </div>
-      </div>
-
-      {/* Local Data Manual Save */}
-      <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-xl shadow-blue-900/5 dark:shadow-none border border-blue-50 dark:border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h3 className="text-xl font-bold text-blue-900 dark:text-white flex items-center gap-2 mb-2">
-            <Check className="w-6 h-6 text-emerald-500" />
-            수동 데이터 저장
-          </h3>
-          <p className="text-sm font-medium text-blue-400 dark:text-slate-400">
-            모든 데이터는 기기 및 클라우드에 자동 저장되지만, 원할 때 기기에 수동으로 저장할 수 있습니다.
-          </p>
-        </div>
-        <button
-          onClick={handleManualSave}
-          className="shrink-0 flex items-center gap-2 px-6 py-3 bg-indigo-500 text-white rounded-xl font-bold transition-colors hover:bg-indigo-600 shadow-sm"
-        >
-          지금 수동으로 저장하기
-        </button>
-      </div>
-
-      {/* Cloud Sync Settings */}
-      <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-xl shadow-blue-900/5 dark:shadow-none border border-blue-50 dark:border-slate-700">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-500">
-            <Cloud className="w-6 h-6" />
+        <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
+          {/* Language */}
+          <div className="px-5 py-4 flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2 mb-1">
+                {t('settings.language.title')}
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('settings.language.desc')}</p>
+            </div>
+            <select
+              value={language || "ko"}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="shrink-0 px-3 py-2 text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 rounded-xl font-bold cursor-pointer outline-none"
+            >
+              <option value="ko">{t('settings.language.ko')}</option>
+              <option value="en">{t('settings.language.en')}</option>
+              <option value="ja">{t('settings.language.ja')}</option>
+            </select>
           </div>
-          <div>
-            <h3 className="text-xl font-bold text-blue-900 dark:text-white">구글 클라우드 동기화</h3>
-            <p className="text-sm font-medium text-blue-400 dark:text-slate-400">Google Firestore에 학습 기록을 저장하고 여러 기기에서 이어가세요.</p>
-          </div>
-        </div>
 
-        {!user ? (
-          <div className="flex flex-col items-center justify-center py-6 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-700">
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 text-center">Google 계정으로 로그인한 뒤 Firebase 클라우드에 데이터를 안전하게 보관하세요.</p>
-            <button className="gsi-material-button" onClick={handleLogin}>
-              <div className="gsi-material-button-state"></div>
-              <div className="gsi-material-button-content-wrapper">
-                <div className="gsi-material-button-icon">
-                  <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
-                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
-                    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
-                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
-                    <path fill="none" d="M0 0h48v48H0z"></path>
-                  </svg>
-                </div>
-                <span className="gsi-material-button-contents">Sign in with Google</span>
-              </div>
+          {/* Dark Mode */}
+          <div className="px-5 py-4 flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2 mb-1">
+                {isDarkMode ? <Moon className="w-4 h-4 text-indigo-400" /> : <Sun className="w-4 h-4 text-orange-400" />}
+                {t('settings.theme.title')}
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('settings.theme.desc')}</p>
+            </div>
+            <button
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className="shrink-0 px-4 py-2 text-xs bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-bold transition-colors hover:bg-slate-200 dark:hover:bg-slate-600"
+            >
+              {isDarkMode ? t('settings.theme.light') : t('settings.theme.dark')}
             </button>
           </div>
-        ) : (
-          <div className="flex flex-col gap-6">
-            <div className="flex items-center justify-between p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100 dark:border-emerald-800/50">
-              <div className="flex items-center gap-3">
-                <img src={user.photoURL || ''} alt="Profile" className="w-10 h-10 rounded-full" />
-                <div>
-                  <p className="font-bold text-emerald-900 dark:text-emerald-100">{user.displayName}</p>
-                  <p className="text-xs text-emerald-600 dark:text-emerald-400">{user.email}</p>
-                </div>
-              </div>
-              <button onClick={logout} className="p-2 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 rounded-lg transition-colors">
-                <LogOut className="w-5 h-5" />
-              </button>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <button 
-                onClick={handleUpload} 
-                disabled={isSyncing}
-                className="flex items-center justify-center gap-2 p-4 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-xl font-bold transition-colors"
-               >
-                <Upload className="w-5 h-5" /> 클라우드 백업하기
-              </button>
-              <button 
-                onClick={handleDownload} 
-                disabled={isSyncing}
-                className="flex items-center justify-center gap-2 p-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-xl font-bold transition-colors"
+          {/* Font Size */}
+          <div className="px-5 py-4 flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2 mb-1">
+                <Type className="w-4 h-4 text-slate-400" />
+                {t('settings.fontSize.title')}
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('settings.fontSize.desc')}</p>
+            </div>
+            <div className="shrink-0 flex items-center gap-1 bg-slate-50 dark:bg-slate-900/50 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+              <button
+                onClick={() => setGlobalFontSize((s) => Math.max(10, s - 1))}
+                className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold shadow-sm flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-700 transition"
               >
-                <Download className="w-5 h-5" /> 클라우드 가져오기
+                -
+              </button>
+              <span className="font-bold text-slate-800 dark:text-white w-10 text-center text-xs">{globalFontSize}px</span>
+              <button
+                onClick={() => setGlobalFontSize((s) => Math.min(24, s + 1))}
+                className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold shadow-sm flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-700 transition"
+              >
+                +
               </button>
             </div>
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 space-y-2">
-              <p className="text-sm font-bold text-slate-700 dark:text-slate-200">자동 백업 상태</p>
-              <p className="text-sm text-slate-600 dark:text-slate-300">{autoBackupStatus}</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                최근 자동 백업: {lastAutoBackupAt ? new Date(lastAutoBackupAt).toLocaleString('ko-KR') : '아직 없음'}
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                자동 백업은 최신본을 유지하면서 스냅샷 여러 개를 남겨 실수 삭제 후에도 이전 상태로 복원할 수 있습니다.
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                자동 백업 스냅샷은 최근 10개만 유지되며, 수동 백업 스냅샷은 별도로 남아 복원 선택 가능합니다.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/20 p-4 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-bold text-slate-700 dark:text-slate-200">복원 가능한 백업 기록</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">수동 백업과 자동 백업 스냅샷을 모두 확인할 수 있습니다.</p>
-                </div>
-                {isLoadingSnapshots && <p className="text-xs text-slate-500 dark:text-slate-400">불러오는 중...</p>}
-              </div>
-              {backupSnapshots.length === 0 ? (
-                <p className="text-sm text-slate-500 dark:text-slate-400">아직 저장된 백업 기록이 없습니다.</p>
-              ) : (
-                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                  {backupSnapshots.map((snapshot) => (
-                    <div key={snapshot.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 dark:border-slate-700 p-3">
-                      <div>
-                        <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                          {snapshot.source === 'manual' ? '수동 백업' : '자동 백업'}
-                        </p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {snapshot.createdAt ? new Date(snapshot.createdAt).toLocaleString('ko-KR') : '시간 정보 없음'}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleRestoreSnapshot(snapshot.id)}
-                          disabled={isSyncing}
-                          className="flex items-center gap-1 px-3 py-2 text-xs font-bold rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 disabled:bg-emerald-300"
-                        >
-                          <RotateCcw className="w-4 h-4" /> 복원
-                        </button>
-                        <button
-                          onClick={() => handleDeleteSnapshot(snapshot.id)}
-                          disabled={isSyncing}
-                          className="flex items-center gap-1 px-3 py-2 text-xs font-bold rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:bg-red-300"
-                        >
-                          <Trash2 className="w-4 h-4" /> 삭제
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            {syncStatus && <p className="text-center font-bold text-sm text-blue-600 dark:text-blue-400">{syncStatus}</p>}
           </div>
-        )}
-      </div>
 
-      {/* Customer Support */}
-      <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-xl shadow-blue-900/5 dark:shadow-none border border-blue-50 dark:border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h3 className="text-xl font-bold text-blue-900 dark:text-white flex items-center gap-2 mb-2">
-            <MessageCircle className="w-6 h-6 text-purple-500" />
-            고객센터
-          </h3>
-          <p className="text-sm font-medium text-blue-400 dark:text-slate-400">
-            앱 사용 중 궁금한 점이나 개선 사항이 있다면 문의해주세요.
-          </p>
+          {/* Prevent Word Wrap */}
+          <div className="px-5 py-4 flex items-center justify-between gap-4">
+            <div>
+               <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2 mb-1">
+                <AlignLeft className="w-4 h-4 text-indigo-400" />
+                {t('settings.preventWrap.title')}
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('settings.preventWrap.desc')}</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+              <input type="checkbox" className="sr-only peer" checked={preventWordWrap} onChange={(e) => setPreventWordWrap(e.target.checked)} />
+              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-500"></div>
+            </label>
+          </div>
+
+          {/* Mobile Nav Settings */}
+          <div className="px-5 py-4 flex items-center justify-between gap-4">
+            <div>
+               <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2 mb-1">
+                <Target className="w-4 h-4 text-indigo-400" />
+                {t('settings.mobileNav.title')}
+              </h3>
+               <p className="text-xs text-slate-500 dark:text-slate-400">{t('settings.mobileNav.desc')}</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+              <input type="checkbox" className="sr-only peer" checked={showNavLabelsMobile} onChange={(e) => setShowNavLabelsMobile(e.target.checked)} />
+              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-500"></div>
+            </label>
+          </div>
+
+          {/* Auto Goal Display Mode */}
+          <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
+             <div>
+               <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2 mb-1">
+                <Target className="w-4 h-4 text-red-500" />
+                {t('settings.autoGoal.title')}
+              </h3>
+               <p className="text-xs text-slate-500 dark:text-slate-400">{t('settings.autoGoal.desc')}</p>
+            </div>
+            <div className="flex bg-slate-100 dark:bg-slate-700 p-1 rounded-xl shrink-0 w-full sm:w-auto">
+              <button
+                onClick={() => setAutoGoalDisplayMode("multiple")}
+                className={cn("flex-1 sm:flex-none px-4 py-2 font-bold text-xs rounded-lg transition-colors", autoGoalDisplayMode === "multiple" ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200")}
+              >{t('settings.autoGoal.multiple')}</button>
+              <button
+                onClick={() => setAutoGoalDisplayMode("single")}
+                className={cn("flex-1 sm:flex-none px-4 py-2 font-bold text-xs rounded-lg transition-colors", autoGoalDisplayMode === "single" ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200")}
+              >{t('settings.autoGoal.single')}</button>
+            </div>
+          </div>
+          {/* Hide Hero Text */}
+          <div className="px-5 py-4 flex items-center justify-between gap-4">
+            <div>
+               <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2 mb-1">
+                <AlignLeft className="w-4 h-4 text-indigo-400" />
+                {t('settings.hideHeroText.title', '상단 인사말 숨기기')}
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('settings.hideHeroText.desc', '각 탭 최상단의 인사말 문구를 화면에서 감춥니다.')}</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+              <input type="checkbox" className="sr-only peer" checked={hideHeroText} onChange={(e) => setHideHeroText(e.target.checked)} />
+              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-500"></div>
+            </label>
+          </div>
         </div>
-        <button
-          onClick={() => setShowSupportModal(true)}
-          className="shrink-0 flex items-center gap-2 px-6 py-3 bg-purple-500 text-white rounded-xl font-bold transition-colors hover:bg-purple-600 shadow-sm"
-        >
-          1:1 문의하기
-        </button>
       </div>
 
-      {/* Danger Zone: Reset All Data */}
-      <div className="bg-red-50 dark:bg-red-900/10 p-8 rounded-3xl border border-red-100 dark:border-red-900/30 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h3 className="text-xl font-bold text-red-600 dark:text-red-400 mb-2">
-            전체 초기화 (Reset All Data)
-          </h3>
-          <p className="text-sm font-medium text-red-500/80 dark:text-red-400/80">
-            D-Day, 오늘계획, 진도관리, 타이머, 달력, 통계, 알림설정 등 기기에 저장된 모든 데이터를 영구적으로 삭제합니다.
-          </p>
+      {/* 2. Data & Sync */}
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
+          <h2 className="text-[13px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">{t('settings.sync.title')}</h2>
         </div>
-        <button
-          onClick={() => setShowResetModal(true)}
-          className="shrink-0 flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-xl font-bold transition-colors hover:bg-red-700 shadow-sm"
-        >
-          모든 데이터 삭제
-        </button>
+        <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
+          
+          {/* Cloud Sync */}
+          <div className="px-5 py-5 flex flex-col gap-4">
+             <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3 w-full max-w-full overflow-hidden">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-500 shrink-0">
+                    <Cloud className="w-5 h-5" />
+                  </div>
+                  <div className="overflow-hidden w-full min-w-0 pr-2">
+                    <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1 truncate">{t('settings.sync.google.title')}</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate w-full" style={{minWidth:0}}>{t('settings.sync.google.desc')}</p>
+                  </div>
+                </div>
+                {user && (
+                   <button onClick={logout} className="shrink-0 p-2.5 text-slate-400 hover:text-red-500 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-xl transition-colors" title={t('settings.sync.logout')}>
+                     <LogOut className="w-4 h-4" />
+                   </button>
+                )}
+             </div>
+
+             {!user ? (
+              <div className="flex flex-col items-center justify-center py-6 bg-slate-50 dark:bg-slate-900/30 rounded-xl border border-slate-200 dark:border-slate-700/50">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-4 text-center">{t('settings.sync.loginPrompt')}</p>
+                  <button className="gsi-material-button scale-95 origin-center -my-1" onClick={handleLogin}>
+                    <div className="gsi-material-button-state"></div>
+                    <div className="gsi-material-button-content-wrapper">
+                      <div className="gsi-material-button-icon">
+                        <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+                          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
+                          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                          <path fill="none" d="M0 0h48v48H0z"></path>
+                        </svg>
+                      </div>
+                      <span className="gsi-material-button-contents">{t('settings.sync.signIn')}</span>
+                    </div>
+                  </button>
+               </div>
+             ) : (
+               <div className="flex flex-col gap-4 mt-2">
+                 <div className="flex items-center gap-3 p-3 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-xl border border-emerald-100 dark:border-emerald-800/50">
+                    <img src={user.photoURL || ""} alt="Profile" className="w-8 h-8 rounded-full shadow-sm" />
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-bold text-sm text-slate-800 dark:text-slate-200 truncate">{user.displayName || t('settings.sync.googleFallback')}</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</span>
+                    </div>
+                 </div>
+                 
+                 <div className="grid grid-cols-2 gap-3">
+                   <button onClick={handleUpload} disabled={isSyncing} className="flex items-center justify-center gap-2 p-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl text-sm font-bold transition-colors shadow-sm">
+                     <Upload className="w-4 h-4" /> {t('settings.sync.upload')}
+                   </button>
+                   <button onClick={handleDownload} disabled={isSyncing} className="flex items-center justify-center gap-2 p-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-xl text-sm font-bold transition-colors shadow-sm">
+                     <Download className="w-4 h-4" /> {t('settings.sync.download')}
+                   </button>
+                 </div>
+                 
+                 <div className="flex flex-col gap-3 p-3 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-700">
+                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                     <div className="flex flex-col gap-0.5">
+                       <span className="font-bold text-slate-700 dark:text-slate-300">{t('settings.sync.autoStatusTitle')}</span>
+                       <span className="text-[11px] text-slate-500 dark:text-slate-400">{t('settings.sync.autoStatusDesc')}</span>
+                     </div>
+                     <span className="font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-100/50 dark:bg-emerald-900/30 px-3 py-1.5 rounded-lg text-center">{autoBackupStatus}</span>
+                   </div>
+
+                   <div className="w-full h-px bg-slate-200 dark:bg-slate-700/50" />
+
+                   <div className="flex flex-col gap-2">
+                     <div className="flex items-center justify-between text-[11px]">
+                       <span className="text-slate-500 font-medium whitespace-nowrap">{t('settings.sync.localData')}</span>
+                       <span className="font-bold text-slate-700 dark:text-slate-300 truncate pl-2">{new Date(localDataTimestamp).toLocaleString()}</span>
+                     </div>
+                     <div className="flex items-center justify-between text-[11px]">
+                       <span className="text-slate-500 font-medium whitespace-nowrap">{t('settings.sync.remoteData')}</span>
+                       <span className="font-bold text-blue-600 dark:text-blue-400 truncate pl-2">
+                         {isFetchingRemoteDate ? t('settings.sync.checking') : remoteDataTimestamp ? new Date(remoteDataTimestamp).toLocaleString() : t('common.none')}
+                       </span>
+                     </div>
+                   </div>
+
+                   <div className="w-full h-px bg-slate-200 dark:bg-slate-700/50" />
+
+                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                     <span className="font-bold text-slate-700 dark:text-slate-300">{t('settings.sync.networkTitle')}</span>
+                     <select 
+                       value={syncNetworkPreference} 
+                       onChange={(e) => setSyncNetworkPreference(e.target.value as "all" | "wifi_only")}
+                       className="px-2 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg outline-none cursor-pointer"
+                     >
+                       <option value="all">{t('settings.sync.network.all')}</option>
+                       <option value="wifi_only">{t('settings.sync.network.wifi_only')}</option>
+                     </select>
+                   </div>
+                 </div>
+                 {syncStatus && <p className="text-center font-bold text-sm text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 py-2 rounded-xl">{syncStatus}</p>}
+               </div>
+             )}
+          </div>
+
+          {/* Local Data Save */}
+          <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2 mb-1">
+                <Check className="w-4 h-4 text-emerald-500" />
+                {t('settings.localSave.title')}
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('settings.localSave.desc')}</p>
+            </div>
+            <button onClick={handleManualSave} className="shrink-0 w-full sm:w-auto px-5 py-2.5 text-sm bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl font-bold transition-colors shadow-sm">
+              {t('settings.localSave.saveButton')}
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Reset Confirmation Modal */}
+      {/* 3. Advanced Settings & Support */}
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
+          <h2 className="text-[13px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">{t('settings.advanced.title')}</h2>
+        </div>
+        <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
+          
+          {/* Support */}
+          <div className="px-5 py-4 flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2 mb-1">
+                <MessageCircle className="w-4 h-4 text-purple-500" />
+                {t('settings.support.title')}
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('settings.support.desc')}</p>
+            </div>
+            <button onClick={() => setShowSupportModal(true)} className="shrink-0 px-4 py-2 bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/20 dark:hover:bg-purple-900/40 text-purple-600 dark:text-purple-400 rounded-xl text-xs font-bold transition-colors">
+              {t('settings.support.contact')}
+            </button>
+          </div>
+
+          {/* Dev Logs */}
+          <div className="px-5 py-4 flex flex-col gap-4">
+             <div className="flex items-center justify-between gap-4">
+               <div>
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2 mb-1">
+                    <Check className="w-4 h-4 text-indigo-500" />
+                    {t('settings.devLogs.title')}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{t('settings.devLogs.desc')}</p>
+               </div>
+               <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input type="checkbox" className="sr-only peer" checked={isLogMode} onChange={(e) => {
+                    const val = e.target.checked;
+                    setIsLogModeConfig(val);
+                    setIsLogMode(val);
+                    showTemporaryStatus(val ? t('settings.devLogs.enabled') : t('settings.devLogs.disabled'), 2000);
+                  }} />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-500"></div>
+               </label>
+             </div>
+             {isLogMode && (
+                <div className="flex items-center justify-end gap-3 pt-1">
+                    <button onClick={() => {
+                    let proceed = true;
+                    try { proceed = window.confirm(t('settings.devLogs.confirmDelete')); } catch(e) { proceed = true; }
+                    if (proceed) { clearLogs(); showTemporaryStatus(t('settings.devLogs.deleted'), 2000); }
+                  }} className="px-4 py-2 text-xs font-bold text-red-500 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 rounded-xl transition-colors">
+                    {t('settings.devLogs.clear')}
+                  </button>
+                  <button onClick={() => {
+                    const logsStr = exportLogsStr();
+                    const blob = new Blob([logsStr], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a'); a.href = url;
+                    a.download = `BrightStudy_Logs_${new Date().toISOString().slice(0, 10)}.json`;
+                    a.click(); URL.revokeObjectURL(url);
+                  }} className="px-4 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl transition-colors">
+                    {t('settings.devLogs.export')}
+                  </button>
+                </div>
+             )}
+          </div>
+
+          {/* Factory Reset */}
+          <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-red-50/50 dark:bg-red-900/10">
+            <div>
+              <h3 className="text-sm font-bold text-red-600 dark:text-red-400 mb-1">{t('settings.factory.title')}</h3>
+              <p className="text-xs text-red-500/80 dark:text-red-400/80">{t('settings.factory.desc')}</p>
+            </div>
+            <button onClick={() => setShowResetModal(true)} className="shrink-0 w-full sm:w-auto px-4 py-2 text-xs bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 rounded-xl font-bold transition-colors">
+              {t('settings.factory.resetButton')}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Modals */}
       {showResetModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-4">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             className="w-full max-w-sm bg-white dark:bg-slate-800 rounded-3xl p-8 shadow-2xl flex flex-col gap-6"
           >
             <div>
-              <h3 className="text-xl font-black text-red-600 dark:text-red-400 mb-2">정말 모든 데이터를 삭제하겠습니까?</h3>
+              <h3 className="text-xl font-black text-red-600 dark:text-red-400 mb-2">
+                {t('settings.factory.confirmTitle')}
+              </h3>
               <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-                삭제된 데이터는 복구할 수 없습니다. (단, 클라우드에 백업을 해둔 경우 추후 다운로드로 복구 가능합니다.)
+                {t('settings.factory.confirmDesc')}
               </p>
             </div>
-            
+
             <div className="flex gap-3 mt-2">
-              <button 
+              <button
                 onClick={handleFactoryReset}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl transition-colors text-sm"
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-colors text-sm"
               >
-                전체 초기화
+                {t('common.delete')}
               </button>
-              <button 
+              <button
                 onClick={() => setShowResetModal(false)}
                 className="flex-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold py-3 rounded-xl transition-colors text-sm"
               >
-                취소
+                {t('common.cancel')}
               </button>
             </div>
           </motion.div>
         </div>
       )}
 
-      {/* Support Confirmation Modal */}
       {showSupportModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-4">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             className="w-full max-w-sm bg-white dark:bg-slate-800 rounded-3xl p-8 shadow-2xl flex flex-col gap-6"
@@ -517,18 +549,27 @@ export default function Settings({ isDarkMode, setIsDarkMode, onDataSync, getAll
             <div>
               <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
                 <MessageCircle className="w-6 h-6 text-purple-500" />
-                고객센터 1:1 문의
+                {t('settings.support.modalTitle')}
               </h3>
               <p className="text-sm font-medium text-slate-600 dark:text-slate-300 leading-relaxed text-center break-keep">
-                어플 사용시 오류 발견사항이나 개선 사항 및 기타 문의사항은 "디스코드 채널 <a href="https://discord.gg/4GHSDBDAnE" target="_blank" rel="noreferrer" className="text-blue-500 hover:text-blue-600 hover:underline">https://discord.gg/4GHSDBDAnE</a>" 으로 문의 바랍니다.
+                {t('settings.support.modalDesc')}
+                <br /><br />
+                <a
+                  href="https://discord.gg/4GHSDBDAnE"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-4 py-3 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-bold rounded-xl inline-block w-full hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+                >
+                  {t('settings.support.discord')}
+                </a>
               </p>
             </div>
-            
-            <button 
+
+            <button
               onClick={() => setShowSupportModal(false)}
-              className="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold py-3 rounded-xl transition-colors text-sm"
+              className="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold py-3 rounded-xl transition-colors text-sm mt-2"
             >
-              닫기
+              {t('common.close')}
             </button>
           </motion.div>
         </div>

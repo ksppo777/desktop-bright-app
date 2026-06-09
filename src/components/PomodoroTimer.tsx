@@ -1,8 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Play, Pause, RefreshCw, Coffee, Brain, Settings2, Target, Square, MoreVertical, X, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { StudySession } from '../types';
 import { isSameDay, parseISO } from 'date-fns';
+
+let capacitorNotifications: any = null;
+import("../lib/capacitor-notifications").then((m) => {
+  capacitorNotifications = m;
+}).catch(() => {});
 
 interface PomodoroTimerProps {
   onSessionComplete: (durationMinutes: number) => void;
@@ -15,6 +21,7 @@ interface PomodoroTimerProps {
 }
 
 export default function PomodoroTimer({ onSessionComplete, sessions, timerProps, books, updateSession, deleteSession, dailyGoalMinutes }: PomodoroTimerProps) {
+  const { t } = useTranslation();
   const {
     timeLeft, setTimeLeft,
     isActive, setIsActive,
@@ -24,8 +31,10 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
     expertBreakTime, setExpertBreakTime,
     timerBookId, setTimerBookId,
     timerChapterId, setTimerChapterId,
+    timerAlertMode, setTimerAlertMode,
     initialTimeLeft,
     stopTimer,
+    syncIntention, setSyncIntention, executeImmediateSync,
     realTimeAddedSeconds
   } = timerProps;
 
@@ -33,12 +42,89 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
   const [sessionToEdit, setSessionToEdit] = useState<StudySession | null>(null);
   const [editSeconds, setEditSeconds] = useState(0);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isRecordsExpanded, setIsRecordsExpanded] = useState(false);
+  const [syncConfirmData, setSyncConfirmData] = useState<{
+     targetDateStr: string;
+     startTimeStr: string;
+     bookId: string;
+     chapterId: string;
+     confirmMsg: string;
+  } | null>(null);
 
-  const toggleTimer = () => {
+  const toggleTimer = async () => {
     if (!isActive && !timerBookId && mode === 'focus') {
-      alert("목표 교재를 먼저 선택해주세요.");
+      try { window.alert(t('pomodoro.confirmSelectBook')); } catch(e) {}
       return;
     }
+
+    if (!isActive) {
+      if (capacitorNotifications) {
+        capacitorNotifications.requestNotificationPermission();
+      }
+    }
+
+    if (!isActive && mode === 'focus' && timerBookId) {
+       const now = new Date();
+       const h = now.getHours();
+       const m = now.getMinutes();
+       const currentMins = h * 60 + m;
+       
+       const { getDailyLayouts, getTimetableRecords, parseMins } = await import('../lib/timetableUtils');
+       const { format } = await import('date-fns');
+       const targetDateStr = format(now, 'yyyy-MM-dd');
+       
+       const layouts = await getDailyLayouts(targetDateStr);
+       const records = await getTimetableRecords(targetDateStr);
+       
+       let currentBlock = layouts.find(b => {
+          const startM = parseMins(b.startTime);
+          let endM = parseMins(b.endTime);
+          if (endM <= startM) endM += 24 * 60;
+          let cm = currentMins;
+          if (cm < startM && cm < 12 * 60 && startM >= 12 * 60) cm += 24 * 60;
+          return cm >= startM && cm < endM;
+       });
+
+       if (!currentBlock) {
+          const currentH = Math.floor(currentMins / 60);
+          const startStr = `${String(currentH).padStart(2, '0')}:00`;
+          const endH = (currentH + 1) % 24;
+          const endStr = `${String(endH).padStart(2, '0')}:00`;
+          
+          currentBlock = {
+              id: startStr,
+              startTime: startStr,
+              endTime: endStr,
+              duration: 60
+          };
+          
+          layouts.push(currentBlock);
+          layouts.sort((a, b) => parseMins(a.startTime) - parseMins(b.startTime));
+          
+          const { saveDailyLayouts } = await import('../lib/timetableUtils');
+          await saveDailyLayouts(targetDateStr, layouts);
+       }
+       
+       if (currentBlock) {
+          const hasRecord = records.find(r => r.blockId === currentBlock?.id || (r.hour !== undefined && `${String(r.hour).padStart(2,'0')}:00` === currentBlock?.id));
+          if (!hasRecord) {
+             const book = books?.find(b => b.id === timerBookId);
+             const chapter = book?.chapters?.find(c => c.id === timerChapterId);
+             let chapterTitle = chapter?.title ? ` - ${chapter.title}` : '';
+             const confirmMsg = t('pomodoro.autoSyncConfirm', { book: book?.title, chapter: chapterTitle });
+             
+             setSyncConfirmData({
+                 targetDateStr,
+                 startTimeStr: `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`,
+                 bookId: timerBookId,
+                 chapterId: timerChapterId || '',
+                 confirmMsg
+             });
+             return; // Wait for user to act on modal
+          }
+       }
+    }
+
     setIsActive(!isActive);
   };
   const resetTimer = () => {
@@ -92,7 +178,7 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
   const todayTotalMinutes = Math.floor(todayTotalSeconds / 60);
   const dailyProgress = dailyGoalMinutes > 0 ? Math.min(100, Math.round((todayTotalMinutes / dailyGoalMinutes) * 100)) : 0;
 
-  let activeTitle = '기본 학습 (미지정)';
+  let activeTitle = t('pomodoro.defaultStudyTitle');
   if (timerBookId) {
     const book = books?.find(b => b.id === timerBookId);
     if (book) {
@@ -105,7 +191,7 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
   }
 
   const groupedSessions = todaySessions.reduce((acc, s) => {
-    const title = s.title || '기본 학습 (미지정)';
+    const title = s.title || t('pomodoro.defaultStudyTitle');
     if (!acc[title]) acc[title] = { totalSeconds: 0, items: [] };
     acc[title].totalSeconds += (s.durationSeconds || s.durationMinutes * 60);
     acc[title].items.push(s);
@@ -125,14 +211,14 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
     <div className="flex flex-col lg:flex-row gap-6 w-full max-w-5xl mx-auto transition-colors">
       
       {/* Left Panel - Today's Record */}
-      <div className="lg:w-1/4 bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-xl shadow-blue-900/5 dark:shadow-none border border-blue-50 dark:border-slate-700 flex flex-col h-full min-h-[400px]">
+      <div className="lg:w-1/4 bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-xl shadow-blue-900/5 dark:shadow-none border border-blue-50 dark:border-slate-700 flex flex-col lg:min-h-[400px]">
         <h3 className="text-sm font-bold text-blue-900 dark:text-slate-100 mb-6 flex items-center gap-2">
-          <Target className="w-5 h-5 text-indigo-500" /> 오늘의 기록
+          <Target className="w-5 h-5 text-indigo-500" /> {t('pomodoro.todayRecord')}
         </h3>
         
         <div className="mb-6 flex flex-col gap-2">
           <div className="flex justify-between items-end mb-1">
-            <span className="text-xs font-bold text-slate-400">목표 달성률</span>
+            <span className="text-xs font-bold text-slate-400">{t('pomodoro.progressRate')}</span>
             <span className="text-lg font-black text-indigo-600 dark:text-indigo-400">{dailyProgress}%</span>
           </div>
           <div className="w-full h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
@@ -141,60 +227,74 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
               style={{ width: `${dailyProgress}%` }}
             />
           </div>
-          <p className="text-[10px] text-slate-400 font-medium text-right mt-1">{todayTotalMinutes}분 / {dailyGoalMinutes}분</p>
+          <p className="text-[10px] text-slate-400 font-medium text-right mt-1">{todayTotalMinutes}{t('pomodoro.minuteSuffix')} / {dailyGoalMinutes}{t('pomodoro.minuteSuffix')}</p>
         </div>
 
         <div className="flex-1 overflow-y-auto pr-2">
           {groupedEntries.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-slate-300 dark:text-slate-600">
-               <span className="text-sm font-medium mt-4">학습 기록이 없습니다.</span>
+               <span className="text-sm font-medium mt-4">{t('pomodoro.noRecords')}</span>
             </div>
           ) : (
-             <ul className="space-y-4">
-               {groupedEntries.map(([title, data]) => {
-                 const isActiveGroup = title === activeTitle && isTracking;
-                 return (
-                   <li key={title} className="flex flex-col p-3 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-700/50">
-                     <div className="flex justify-between items-start mb-2">
-                       <span className="text-sm font-bold text-slate-700 dark:text-slate-300 leading-tight pr-2">
-                         {title}
-                       </span>
-                       <span className={cn("text-lg font-black whitespace-nowrap", isActiveGroup ? "text-blue-500 animate-pulse" : "text-indigo-600 dark:text-indigo-400")}>
-                         {Math.floor(data.totalSeconds / 60) > 0 ? `${Math.floor(data.totalSeconds / 60)}분 ` : ''}{data.totalSeconds % 60}초
-                       </span>
-                     </div>
-                     <div className="flex flex-col gap-1.5 mt-2">
-                       {data.items.map(s => (
-                         <div key={s.id} className="group relative flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-800 px-2.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700/50">
-                           <span>{new Date(s.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                           <div className="flex items-center gap-3">
-                             <span className="text-indigo-500 dark:text-indigo-400">+{s.durationSeconds ? (Math.floor(s.durationSeconds / 60) > 0 ? `${Math.floor(s.durationSeconds / 60)}분 ` : '') + (s.durationSeconds % 60) + '초' : s.durationMinutes + '분'}</span>
-                             <button
-                               onClick={() => {
-                                 setSessionToEdit(s);
-                                 setEditSeconds(s.durationSeconds || s.durationMinutes * 60);
-                                 setEditModalOpen(true);
-                               }}
-                               className="p-1 -mr-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors"
-                             >
-                               <MoreVertical className="w-4 h-4" />
-                             </button>
+             <div className="flex flex-col h-full space-y-4">
+               <ul className="space-y-4">
+                 {groupedEntries.map(([title, data], index) => {
+                   if (index > 0 && !isRecordsExpanded) return null;
+                   const isActiveGroup = title === activeTitle && isTracking;
+                   return (
+                     <li key={title} className="flex flex-col p-3 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-700/50">
+                       <div className="flex justify-between items-start mb-2">
+                         <span className="text-sm font-bold text-slate-700 dark:text-slate-300 leading-tight pr-2">
+                           {title}
+                         </span>
+                         <span className={cn("text-lg font-black whitespace-nowrap", isActiveGroup ? "text-blue-500 animate-pulse" : "text-indigo-600 dark:text-indigo-400")}>
+                           {Math.floor(data.totalSeconds / 60) > 0 ? `${Math.floor(data.totalSeconds / 60)}${t('pomodoro.minuteSuffix')} ` : ''}{data.totalSeconds % 60}{t('pomodoro.secondSuffix')}
+                         </span>
+                       </div>
+                       <div className="flex flex-col gap-1.5 mt-2">
+                         {data.items.map((s, itemIdx) => {
+                           if (!isRecordsExpanded && itemIdx > 0) return null;
+                           return (
+                             <div key={s.id} className="group relative flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-800 px-2.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700/50">
+                             <span>{new Date(s.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                             <div className="flex items-center gap-3">
+                               <span className="text-indigo-500 dark:text-indigo-400">+{s.durationSeconds ? (Math.floor(s.durationSeconds / 60) > 0 ? `${Math.floor(s.durationSeconds / 60)}${t('pomodoro.minuteSuffix')} ` : '') + (s.durationSeconds % 60) + t('pomodoro.secondSuffix') : s.durationMinutes + t('pomodoro.minuteSuffix')}</span>
+                               <button
+                                 onClick={() => {
+                                   setSessionToEdit(s);
+                                   setEditSeconds(s.durationSeconds || s.durationMinutes * 60);
+                                   setEditModalOpen(true);
+                                 }}
+                                 className="p-1 -mr-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-700 transition-colors"
+                               >
+                                 <MoreVertical className="w-4 h-4" />
+                               </button>
+                             </div>
                            </div>
-                         </div>
-                       ))}
-                       {isActiveGroup && (
-                         <div className="flex items-center justify-between text-xs font-bold text-blue-500 bg-blue-50 dark:bg-slate-800 px-2.5 py-2 rounded-lg border border-blue-200 dark:border-slate-700/50 animate-pulse">
-                           <span className="flex items-center gap-2">
-                             <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>진행 중
-                           </span>
-                           <span>+{Math.floor(realTimeAddedSeconds / 60) > 0 ? `${Math.floor(realTimeAddedSeconds / 60)}분 ` : ''}{realTimeAddedSeconds % 60}초</span>
-                         </div>
-                       )}
-                     </div>
-                   </li>
-                 )
-               })}
-             </ul>
+                           );
+                         })}
+                         {isActiveGroup && (
+                           <div className="flex items-center justify-between text-xs font-bold text-blue-500 bg-blue-50 dark:bg-slate-800 px-2.5 py-2 rounded-lg border border-blue-200 dark:border-slate-700/50 animate-pulse">
+                             <span className="flex items-center gap-2">
+                               <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>{t('pomodoro.inProgress')}
+                             </span>
+                             <span>+{Math.floor(realTimeAddedSeconds / 60) > 0 ? `${Math.floor(realTimeAddedSeconds / 60)}${t('pomodoro.minuteSuffix')} ` : ''}{realTimeAddedSeconds % 60}{t('pomodoro.secondSuffix')}</span>
+                           </div>
+                         )}
+                       </div>
+                     </li>
+                   )
+                 })}
+               </ul>
+               {(groupedEntries.length > 1 || (groupedEntries[0] && groupedEntries[0][1].items.length > 1)) && (
+                 <button 
+                   onClick={() => setIsRecordsExpanded(!isRecordsExpanded)}
+                   className="w-full py-2 text-xs font-bold text-slate-500 hover:text-indigo-500 dark:text-slate-400 dark:hover:text-indigo-400 transition-colors bg-slate-50 hover:bg-slate-100 dark:bg-slate-900/30 dark:hover:bg-slate-900/50 rounded-xl mt-2"
+                 >
+                   {isRecordsExpanded ? t('common.close', '접기') : t('common.expand', '펼쳐보기')}
+                 </button>
+               )}
+             </div>
           )}
         </div>
       </div>
@@ -212,7 +312,7 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
                setTimerChapterId('');
             }}
           >
-            <option value="">(목표 교재 선택 안함)</option>
+            <option value="">({t('pomodoro.noTargetBook')})</option>
             {books?.map(b => (
               <option key={b.id} value={b.id}>{b.title}</option>
             ))}
@@ -224,12 +324,31 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
               value={timerChapterId || ''}
               onChange={(e) => setTimerChapterId(e.target.value)}
             >
-              <option value="">(목차 선택 안함)</option>
+              <option value="">({t('pomodoro.noTargetChapter')})</option>
               {books?.find(b => b.id === timerBookId)?.chapters?.map(c => (
                 <option key={c.id} value={c.id}>{c.title}</option>
               ))}
             </select>
           )}
+        </div>
+
+        {/* Alert Mode Selection */}
+        <div className="flex gap-2 w-full max-w-sm mb-6 bg-slate-50 dark:bg-slate-900/50 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-700/50">
+          {(['sound', 'vibrate', 'both', 'off'] as const).map(m => (
+            <button
+              key={m}
+              onClick={() => setTimerAlertMode(m)}
+              className={cn(
+               "flex-1 py-1.5 text-xs font-bold rounded-xl transition-all capitalize",
+               timerAlertMode === m ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+              )}
+            >
+              {m === 'sound' && t('pomodoro.soundOnly')}
+              {m === 'vibrate' && t('pomodoro.vibrateOnly')}
+              {m === 'both' && t('pomodoro.soundAndVibrate')}
+              {m === 'off' && t('pomodoro.screenOnly')}
+            </button>
+          ))}
         </div>
 
         <div className="flex gap-2 p-1.5 mb-8 bg-blue-50/80 dark:bg-slate-900/80 rounded-full border border-blue-100 dark:border-slate-700">
@@ -240,7 +359,7 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
               mode === 'focus' ? cn("bg-white dark:bg-slate-700", timerMode === 'expert' ? "text-red-500" : "text-blue-500") : "bg-transparent text-blue-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-slate-300 shadow-none"
             )}
           >
-            <Brain className="w-4 h-4" /> Focus
+            <Brain className="w-4 h-4" /> {t('pomodoro.focusButton')}
           </button>
           <button
             onClick={() => switchMode('break')}
@@ -249,7 +368,7 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
               mode === 'break' ? "bg-white dark:bg-slate-700 text-emerald-500" : "bg-transparent text-blue-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-slate-300 shadow-none"
             )}
           >
-            <Coffee className="w-4 h-4" /> Break
+            <Coffee className="w-4 h-4" /> {t('pomodoro.breakButton')}
           </button>
         </div>
 
@@ -303,7 +422,7 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
               {hours > 0 ? `${String(hours).padStart(2, '0')}:` : ''}{String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
             </span>
             <span className="text-blue-400 dark:text-slate-400 font-bold text-[10px] uppercase mt-2 tracking-widest">
-              {mode === 'focus' ? 'STAY FOCUSED' : 'TIME TO RELAX'}
+              {mode === 'focus' ? t('pomodoro.stayFocused') : t('pomodoro.timeToRelax')}
             </span>
           </div>
         </div>
@@ -326,7 +445,7 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
           <button
             onClick={stopTimer}
             className="flex items-center justify-center w-16 h-16 rounded-full bg-rose-500 text-white shadow-lg shadow-rose-200 dark:shadow-none hover:bg-rose-600 transition-transform active:scale-95"
-            title="정지"
+            title={t('pomodoro.stop')}
           >
             <Square className="w-6 h-6 fill-current" />
           </button>
@@ -334,7 +453,7 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
           <button
             onClick={resetTimer}
             className="flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 dark:bg-slate-700 text-blue-600 dark:text-slate-300 hover:bg-blue-100 dark:hover:bg-slate-600 transition-transform active:scale-95"
-            title="리셋"
+            title={t('pomodoro.reset')}
           >
             <RefreshCw className="w-6 h-6" />
           </button>
@@ -352,12 +471,12 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
         >
           <div className="flex items-center justify-between mb-2">
             <h4 className="font-bold text-blue-900 dark:text-slate-100 flex items-center gap-2">
-              <span className="text-xl">🌱</span> 초심자 모드
+              <span className="text-xl">🌱</span> {t('pomodoro.beginnerMode')}
             </h4>
             {timerMode === 'beginner' && <div className="w-2 h-2 rounded-full bg-blue-500" />}
           </div>
           <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">
-            25분 집중 / 5분 휴식의 가장 효과적인 사이클입니다.
+            {t('pomodoro.beginnerDescription')}
           </p>
           <span className="inline-block px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded-md text-[10px] font-bold text-slate-600 dark:text-slate-300 font-mono">
             25:00
@@ -376,12 +495,12 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
           >
             <div className="flex items-center justify-between mb-2">
               <h4 className="font-bold text-blue-900 dark:text-slate-100 flex items-center gap-2">
-                <Settings2 className="w-5 h-5 text-red-500" /> 고수 모드
+                <Settings2 className="w-5 h-5 text-red-500" /> {t('pomodoro.expertMode')}
               </h4>
               {timerMode === 'expert' && <div className="w-2 h-2 rounded-full bg-red-500" />}
             </div>
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-4">
-              {mode === 'focus' ? '학습' : '휴식'} 시간을 원하는 대로 지정할 수 있습니다.
+              {mode === 'focus' ? t('pomodoro.focusTime') : t('pomodoro.breakTime')}
             </p>
           </button>
           
@@ -433,12 +552,12 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
           <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-2xl w-full max-w-sm border border-blue-50 dark:border-slate-700 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-black text-blue-900 dark:text-slate-100 flex items-center gap-2">
-                <Pencil className="w-5 h-5 text-blue-500" /> 기록 수정
+                <Pencil className="w-5 h-5 text-blue-500" /> {t('pomodoro.editRecord')}
               </h3>
               <button 
                 onClick={() => setEditModalOpen(false)}
                 className="text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 w-8 h-8 rounded-full flex items-center justify-center transition-colors"
-                title="닫기"
+                title={t('pomodoro.close')}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -446,14 +565,14 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
             
             <div className="space-y-4 mb-6">
               <div className="text-sm font-bold text-slate-500 dark:text-slate-400">
-                {sessionToEdit.title || '기본 학습 (미지정)'}
+                {sessionToEdit.title || t('pomodoro.defaultStudyTitle')}
               </div>
               <div className="text-xs font-bold text-slate-400 dark:text-slate-500">
                 {new Date(sessionToEdit.date).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </div>
               <div className="flex gap-4">
                 <div className="flex-1">
-                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">학습 시간 (분)</label>
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">{t('pomodoro.studyTimeMinutes')}</label>
                   <input 
                     type="number"
                     min="0"
@@ -463,7 +582,7 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
                   />
                 </div>
                 <div className="flex-1">
-                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">초</label>
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">{t('pomodoro.seconds')}</label>
                   <input 
                     type="number"
                     min="0"
@@ -489,9 +608,9 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
                   }
                 }}
                 className={cn("flex-shrink-0 px-4 py-3 rounded-xl font-bold transition-all flex items-center justify-center", confirmDelete ? "bg-red-500 text-white shadow-lg shadow-red-200 dark:shadow-none" : "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/20")}
-                title="삭제"
+                title={t('pomodoro.delete')}
               >
-                {confirmDelete ? <span className="text-sm px-1">삭제 확인</span> : <Trash2 className="w-5 h-5" />}
+                {confirmDelete ? <span className="text-sm px-1">{t('pomodoro.deleteConfirm')}</span> : <Trash2 className="w-5 h-5" />}
               </button>
               <button 
                 onClick={() => {
@@ -504,7 +623,77 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
                 }}
                 className="flex-1 px-4 py-3 rounded-xl bg-blue-500 text-white font-bold hover:bg-blue-600 transition-colors shadow-lg shadow-blue-200 dark:shadow-none"
               >
-                완료
+                {t('common.done')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sync Confirm Modal */}
+      {syncConfirmData && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 dark:bg-slate-900/80 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-2xl w-full max-w-sm border border-blue-50 dark:border-slate-700 animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-black text-blue-900 dark:text-slate-100 mb-4 flex items-center gap-2">
+              <RefreshCw className="w-5 h-5 text-indigo-500" /> {t('pomodoro.autoSyncTitle')}
+            </h3>
+            <p className="text-sm font-medium text-slate-600 dark:text-slate-300 mb-6 leading-relaxed">
+              {syncConfirmData.confirmMsg}
+            </p>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => {
+                  setIsActive(true);
+                  setSyncConfirmData(null);
+                }}
+                className="flex-1 px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-bold hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600 transition-colors"
+              >
+                {t('common.cancel')}
+              </button>
+              <button 
+                onClick={async () => {
+                  const { getDailyLayouts, getTimetableRecords, saveTimetableRecords, parseMins } = await import('../lib/timetableUtils');
+                  const { targetDateStr, startTimeStr, bookId, chapterId } = syncConfirmData;
+                  const layouts = await getDailyLayouts(targetDateStr);
+                  const records = await getTimetableRecords(targetDateStr);
+                  
+                  const startMins = parseMins(startTimeStr);
+                  const currentBlock = layouts.find(b => {
+                      const bStart = parseMins(b.startTime);
+                      let bEnd = parseMins(b.endTime);
+                      if (bEnd <= bStart) bEnd += 24 * 60;
+                      return startMins >= bStart && startMins < bEnd; 
+                  });
+                  
+                  if (currentBlock) {
+                     const newRecords = [...records, {
+                         id: Date.now().toString(),
+                         blockId: currentBlock.id,
+                         bookId: bookId,
+                         chapterId: chapterId,
+                         startPage: 0,
+                         endPage: 0,
+                         memo: '',
+                         isAutoSynced: true
+                     }];
+                     await saveTimetableRecords(targetDateStr, newRecords);
+                  }
+                  
+                  timerProps.executeImmediateSync && timerProps.executeImmediateSync(syncConfirmData);
+                  timerProps.setSyncIntention && timerProps.setSyncIntention({
+                     targetDateStr,
+                     startTimeStr,
+                     bookId,
+                     chapterId,
+                     blockId: currentBlock?.id
+                  });
+                  
+                  setIsActive(true);
+                  setSyncConfirmData(null);
+                }}
+                className="flex-1 px-4 py-3 rounded-xl bg-indigo-500 text-white font-bold hover:bg-indigo-600 transition-colors shadow-lg shadow-indigo-200 dark:shadow-none"
+              >
+                {t('pomodoro.syncStart')}
               </button>
             </div>
           </div>

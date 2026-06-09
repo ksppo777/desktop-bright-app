@@ -5,6 +5,7 @@ export const setStorage = async (key: string, value: any) => {
     key,
     value: JSON.stringify(value),
   });
+  window.dispatchEvent(new CustomEvent('capacitor-storage-change', { detail: { key, value } }));
 };
 
 export const getStorage = async (key: string): Promise<any> => {
@@ -14,10 +15,12 @@ export const getStorage = async (key: string): Promise<any> => {
 
 export const removeStorage = async (key: string) => {
   await Preferences.remove({ key });
+  window.dispatchEvent(new CustomEvent('capacitor-storage-change', { detail: { key, value: null } }));
 };
 
 export const clearStorage = async () => {
   await Preferences.clear();
+  window.dispatchEvent(new Event('capacitor-storage-clear'));
 };
 
 export const getAllKeys = async () => {

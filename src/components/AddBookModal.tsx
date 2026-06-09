@@ -1,4 +1,5 @@
 import { useState, FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Plus, Book as BookIcon } from 'lucide-react';
 import { Book } from '../types';
 
@@ -18,6 +19,7 @@ const themeColors = [
 ];
 
 export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalProps) {
+  const { t } = useTranslation();
   const [newBookTitle, setNewBookTitle] = useState('');
   const [newBookAuthor, setNewBookAuthor] = useState('');
   const [selectedTheme, setSelectedTheme] = useState(themeColors[0]);
@@ -39,7 +41,7 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
       <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl w-full max-w-md border border-slate-100 dark:border-slate-700 animate-in fade-in zoom-in-95 duration-200">
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2">
-             <BookIcon className="w-5 h-5 text-indigo-500" /> 새 교재 등록
+             <BookIcon className="w-5 h-5 text-indigo-500" /> {t('bookModal.title')}
           </h3>
           <button 
             onClick={onClose}
@@ -51,10 +53,10 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 block">교재 이름</label>
+            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 block">{t('bookModal.bookName')}</label>
             <input 
               type="text" 
-              placeholder="예: 객관식 세법"
+              placeholder={t('bookModal.bookNamePlaceholder')}
               value={newBookTitle}
               onChange={e => setNewBookTitle(e.target.value)}
               className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -63,10 +65,10 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
           </div>
           
           <div>
-            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 block">저자 / 출판사 (선택)</label>
+            <label className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 block">{t('bookModal.authorLabel')}</label>
             <input 
               type="text" 
-              placeholder="예: 홍길동"
+              placeholder={t('bookModal.authorPlaceholder')}
               value={newBookAuthor}
               onChange={e => setNewBookAuthor(e.target.value)}
               className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -74,7 +76,7 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
           </div>
 
           <div>
-             <label className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 block">테마 컬러</label>
+             <label className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 block">{t('bookModal.themeColor')}</label>
              <div className="flex items-center gap-2">
                {themeColors.map(color => (
                  <button
@@ -89,10 +91,10 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
 
           <div className="pt-2 flex gap-3">
              <button type="button" onClick={onClose} className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 font-bold rounded-xl transition-colors">
-               취소
+               {t('common.cancel')}
              </button>
              <button type="submit" disabled={!newBookTitle.trim()} className="flex-1 py-3 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm">
-               <Plus className="w-4 h-4" /> 등록하기
+               <Plus className="w-4 h-4" /> {t('bookModal.submit')}
              </button>
           </div>
         </form>

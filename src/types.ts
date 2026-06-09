@@ -51,6 +51,8 @@ export interface StudySession {
   bookId?: string;
   chapterId?: string;
   title?: string;
+  timetableBlockId?: string;
+  timetableDate?: string;
 }
 
 export interface ExamDate {
@@ -67,5 +69,5 @@ export interface StudyAlarm {
   expertMode?: boolean;
   bookId?: string;
   chapterId?: string;
+  alertMode?: 'sound' | 'vibrate' | 'both' | 'off';
 }
-

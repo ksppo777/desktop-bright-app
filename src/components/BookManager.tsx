@@ -1,5 +1,6 @@
 import { Book, Chapter } from '../types';
 import { useState, useRef, useEffect, FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Plus, Check, ChevronDown, ChevronUp, BookOpen, Trash2, X, Edit3, Copy, MoreVertical, Edit2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -18,6 +19,7 @@ const THEME_COLORS = [
 ];
 
 export default function BookManager({ books, setBooks }: BookManagerProps) {
+  const { t } = useTranslation();
   const [isAddingBook, setIsAddingBook] = useState(false);
   const [newBookTitle, setNewBookTitle] = useState('');
   const [newBookAuthor, setNewBookAuthor] = useState('');
@@ -126,7 +128,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
     const start = parseInt(newChapterStart, 10);
     const end = parseInt(newChapterEnd, 10);
     
-    if (start > end) return alert('시작 페이지가 끝 페이지보다 클 수 없습니다.');
+    if (start > end) { try { window.alert(t('bookManager.errors.startPageGreater')); } catch(e){} return; }
 
     const newChapter: Chapter = {
       id: Date.now().toString(),
@@ -206,7 +208,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
     const newBook: Book = {
       ...bookToCopy,
       id: Date.now().toString(),
-      title: `${bookToCopy.title} (복사본)`,
+      title: `${bookToCopy.title} ${t('bookManager.copySuffix')}`,
       createdAt: Date.now(),
       chapters: bookToCopy.chapters?.map(ch => ({
         ...ch,
@@ -253,7 +255,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
     if (!editChapterTitle.trim() || !editChapterStart || !editChapterEnd) return;
     const start = parseInt(editChapterStart, 10);
     const end = parseInt(editChapterEnd, 10);
-    if (start > end) return alert('시작 페이지가 끝 페이지보다 클 수 없습니다.');
+    if (start > end) { try { window.alert(t('bookManager.errors.startPageGreater')); } catch(e){} return; }
 
     setBooks(prev => prev.map(book => {
       if (book.id === bookId) {
@@ -322,14 +324,14 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
   const handleSaveAutoGoal = (bookId: string) => {
     if (!agStartDate || !agEndDate || !agIterations) return;
     if (agTargetChapterIds.length === 0) {
-      alert("하나 이상의 챕터를 선택해주세요.");
+      try { window.alert(t('bookManager.errors.selectAtLeastOneChapter')); } catch(e){}
       return;
     }
     
     const start = new Date(agStartDate);
     const end = new Date(agEndDate);
     if (end < start) {
-      alert("종료일이 시작일보다 앞설 수 없습니다.");
+      try { window.alert(t('bookManager.errors.endBeforeStart')); } catch(e){}
       return;
     }
     const diffTime = end.getTime() - start.getTime();
@@ -378,7 +380,9 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
   };
 
   const handleDeleteAutoGoal = (bookId: string, goalId: string) => {
-    if (!window.confirm("정말 이 자동 도전 목표를 삭제하시겠습니까? (도전 기록은 유지되며 새로운 도전을 생성할 수 있습니다.)")) return;
+    let proceed = true;
+    try { proceed = window.confirm(t('bookManager.confirm.deleteAutoGoal')); } catch(e) { proceed = true; }
+    if (!proceed) return;
     setBooks(prev => prev.map(book => {
       if (book.id !== bookId) return book;
       return {
@@ -444,26 +448,26 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
   return (
     <div className="space-y-6 w-full max-w-4xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <h2 className="text-2xl font-black text-blue-900 dark:text-white flex items-center gap-2">
-          내 도서 목록
+          <h2 className="text-2xl font-black text-blue-900 dark:text-white flex items-center gap-2">
+          {t('bookManager.title')}
         </h2>
         <div className="flex items-center justify-end gap-2">
           <button onClick={() => setShowTrashModal(true)} className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 px-3 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-1 border border-transparent">
             <Trash2 className="w-5 h-5" />
-            <span className="hidden sm:inline">휴지통</span>
+            <span className="hidden sm:inline">{t('bookManager.trash')}</span>
           </button>
           {validBooks.length > 0 && (
-            confirmDeleteAll ? (
+                confirmDeleteAll ? (
               <div className="flex items-center gap-1">
-                <button onClick={() => { setBooks(prev => prev.map(b => ({ ...b, isTrash: true }))); setConfirmDeleteAll(false); }} className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50 px-3 py-2.5 rounded-xl text-sm font-bold transition-all border border-red-200 dark:border-red-800">모두 삭제할까요?</button>
-                <button onClick={() => setConfirmDeleteAll(false)} className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 px-3 py-2.5 rounded-xl text-sm font-bold transition-all border border-slate-200 dark:border-slate-700">취소</button>
+                <button onClick={() => { setBooks(prev => prev.map(b => ({ ...b, isTrash: true }))); setConfirmDeleteAll(false); }} className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50 px-3 py-2.5 rounded-xl text-sm font-bold transition-all border border-red-200 dark:border-red-800">{t('bookManager.confirmDeleteAllQuestion')}</button>
+                <button onClick={() => setConfirmDeleteAll(false)} className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 px-3 py-2.5 rounded-xl text-sm font-bold transition-all border border-slate-200 dark:border-slate-700">{t('common.cancel')}</button>
               </div>
             ) : (
               <button 
                 onClick={() => setConfirmDeleteAll(true)}
                 className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 px-3 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center border border-slate-200 dark:border-slate-700 hover:border-red-200 dark:hover:border-red-800"
               >
-                <span>전체 삭제</span>
+                <span>{t('bookManager.deleteAll')}</span>
               </button>
             )
           )}
@@ -471,7 +475,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
             onClick={() => setIsAddingBook(true)}
             className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-200 dark:shadow-none transition-all flex items-center gap-2"
           >
-            <Plus className="w-5 h-5" /> 책 추가
+            <Plus className="w-5 h-5" /> {t('bookManager.addBook')}
           </button>
         </div>
       </div>
@@ -479,13 +483,13 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
       {isAddingBook && (
         <form onSubmit={handleAddBook} className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-xl shadow-blue-900/5 dark:shadow-none flex flex-col gap-5 border border-blue-50 dark:border-slate-700">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="text-xl font-bold text-blue-900 dark:text-white">새로운 목표 책 등록</h3>
-            <button type="button" onClick={() => setIsAddingBook(false)} className="text-blue-400 dark:text-slate-400 hover:text-blue-600 dark:hover:text-slate-300 rounded-lg p-2 bg-blue-50 dark:bg-slate-700 hover:bg-blue-100 dark:hover:bg-slate-600 transition-colors">취소</button>
-          </div>
+              <h3 className="text-xl font-bold text-blue-900 dark:text-white">{t('bookModal.title')}</h3>
+              <button type="button" onClick={() => setIsAddingBook(false)} className="text-blue-400 dark:text-slate-400 hover:text-blue-600 dark:hover:text-slate-300 rounded-lg p-2 bg-blue-50 dark:bg-slate-700 hover:bg-blue-100 dark:hover:bg-slate-600 transition-colors">{t('common.cancel')}</button>
+            </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <input
               type="text"
-              placeholder="책 제목 (예: 수학의 정석)"
+              placeholder={t('bookModal.bookNamePlaceholder')}
               value={newBookTitle}
               onChange={(e) => setNewBookTitle(e.target.value)}
               className="px-4 py-3 bg-blue-50/50 dark:bg-slate-900/50 border border-blue-100 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white dark:focus:bg-slate-800 transition-colors text-blue-900 dark:text-white font-medium placeholder:text-blue-300 dark:placeholder:text-slate-500"
@@ -493,14 +497,14 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
             />
             <input
               type="text"
-              placeholder="저자 / 출판사 (선택)"
+              placeholder={t('bookModal.authorPlaceholder')}
               value={newBookAuthor}
               onChange={(e) => setNewBookAuthor(e.target.value)}
               className="px-4 py-3 bg-blue-50/50 dark:bg-slate-900/50 border border-blue-100 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white dark:focus:bg-slate-800 transition-colors text-blue-900 dark:text-white font-medium placeholder:text-blue-300 dark:placeholder:text-slate-500"
             />
           </div>
           <div>
-            <label className="text-[10px] font-bold text-blue-400 uppercase mb-2 block tracking-wider">테마 색상</label>
+            <label className="text-[10px] font-bold text-blue-400 uppercase mb-2 block tracking-wider">{t('bookModal.themeColor')}</label>
             <div className="flex gap-3">
               {THEME_COLORS.map(theme => (
                 <button
@@ -516,7 +520,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
           </div>
           <div className="flex justify-end mt-4">
             <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold transition-all shadow-lg shadow-blue-200 dark:shadow-none">
-              등록하기
+              {t('bookModal.submit')}
             </button>
           </div>
         </form>
@@ -525,8 +529,8 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
       {books.length === 0 && !isAddingBook && (
         <div className="text-center py-20 bg-blue-50 dark:bg-slate-800/50 border-2 border-blue-200 dark:border-slate-700 border-dashed rounded-3xl shadow-inner">
           <BookOpen className="w-16 h-16 text-blue-300 dark:text-slate-600 mx-auto mb-4" />
-          <p className="text-blue-500 dark:text-slate-400 font-medium mb-4">아직 등록된 책이 없어요.<br/>목표로 하는 책을 추가하고 진도를 기록해보세요!</p>
-          <button onClick={() => setIsAddingBook(true)} className="text-blue-600 dark:text-indigo-400 font-bold text-sm uppercase tracking-wider hover:underline">책 추가하러 가기</button>
+          <p className="text-blue-500 dark:text-slate-400 font-medium mb-4">{t('bookManager.emptyMessage')}</p>
+          <button onClick={() => setIsAddingBook(true)} className="text-blue-600 dark:text-indigo-400 font-bold text-sm uppercase tracking-wider hover:underline">{t('bookManager.goToAddBook')}</button>
         </div>
       )}
 
@@ -607,10 +611,10 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                               detailTab === tab ? "text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400 bg-blue-50/50 dark:bg-slate-800" : "text-blue-300 dark:text-slate-500 border-transparent hover:text-blue-500 dark:hover:text-slate-300"
                             )}
                           >
-                            {tab === 'chapters' && '목차 (Chapters)'}
-                            {tab === 'bookmarks' && '책갈피 (Bookmarks)'}
-                            {tab === 'notes' && '메모 (Notes)'}
-                            {tab === 'autoGoal' && '자동 도전 (Auto Goal)'}
+                            {tab === 'chapters' && t('bookManager.tabs.chapters')}
+                            {tab === 'bookmarks' && t('bookManager.tabs.bookmarks')}
+                            {tab === 'notes' && t('bookManager.tabs.notes')}
+                            {tab === 'autoGoal' && t('bookManager.tabs.autoGoal')}
                           </button>
                         ))}
                       </div>
@@ -618,16 +622,16 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                       {detailTab === 'chapters' && (
                         <div>
                           <div className="flex justify-between items-center mb-4">
-                            <h4 className="font-bold text-blue-900 dark:text-slate-200 text-sm">목차 진행도</h4>
+                            <h4 className="font-bold text-blue-900 dark:text-slate-200 text-sm">{t('bookManager.chaptersProgress')}</h4>
                             <button onClick={() => setIsAddingChapterId(book.id)} className="text-xs font-bold text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center gap-1 uppercase tracking-wider bg-blue-50 dark:bg-slate-700 px-3 py-1.5 rounded-lg">
-                              <Plus className="w-3.5 h-3.5" /> ADD
+                              <Plus className="w-3.5 h-3.5" /> {t('chapterModal.add')}
                             </button>
                           </div>
 
                           {isAddingChapterId === book.id && (
                             <form onSubmit={(e) => handleAddChapter(book.id, e)} className="bg-blue-50/50 dark:bg-slate-800/80 p-5 rounded-2xl mb-4 flex flex-col sm:flex-row gap-4 items-end border border-blue-100 dark:border-slate-700/50">
                               <div className="flex-1 w-full relative">
-                                <label className="text-[10px] font-bold text-blue-400 uppercase mb-1.5 block">Chapter Title</label>
+                                <label className="text-[10px] font-bold text-blue-400 uppercase mb-1.5 block">{t('chapterModal.chapterName')}</label>
                                 <input
                                   type="text"
                                   value={newChapterTitle}
@@ -638,7 +642,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                               </div>
                               <div className="flex gap-4 w-full sm:w-auto">
                                 <div className="w-1/2 sm:w-24">
-                                  <label className="text-[10px] font-bold text-blue-400 uppercase mb-1.5 block">Start Page</label>
+                                  <label className="text-[10px] font-bold text-blue-400 uppercase mb-1.5 block">{t('chapterModal.pageStartPlaceholder')}</label>
                                   <input
                                     type="number"
                                     value={newChapterStart}
@@ -649,7 +653,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                                   />
                                 </div>
                                 <div className="w-1/2 sm:w-24">
-                                  <label className="text-[10px] font-bold text-blue-400 uppercase mb-1.5 block">End Page</label>
+                                  <label className="text-[10px] font-bold text-blue-400 uppercase mb-1.5 block">{t('chapterModal.pageEndPlaceholder')}</label>
                                   <input
                                     type="number"
                                     value={newChapterEnd}
@@ -660,15 +664,15 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                                   />
                                 </div>
                               </div>
-                              <div className="flex gap-2 w-full sm:w-auto justify-end mt-2 sm:mt-0">
-                                <button type="submit" className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-blue-200 dark:shadow-none hover:bg-blue-700 transition-colors">Add</button>
-                                <button type="button" onClick={() => setIsAddingChapterId(null)} className="text-blue-400 px-3 py-2.5 text-sm font-bold hover:text-blue-600 dark:hover:text-blue-300 transition-colors">Cancel</button>
+                              <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-end mt-2 sm:mt-0">
+                                <button type="submit" className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-blue-200 dark:shadow-none hover:bg-blue-700 transition-colors">{t('chapterModal.add')}</button>
+                                <button type="button" onClick={() => setIsAddingChapterId(null)} className="text-blue-400 px-3 py-2.5 text-sm font-bold hover:text-blue-600 dark:hover:text-blue-300 transition-colors">{t('common.cancel')}</button>
                               </div>
                             </form>
                           )}
 
                           {(!book.chapters || book.chapters.length === 0) ? (
-                            <div className="text-center py-8 text-sm font-medium text-blue-300">목차를 추가해서 구체적인 목표를 세워보세요.</div>
+                            <div className="text-center py-8 text-sm font-medium text-blue-300">{t('bookManager.addChaptersPrompt')}</div>
                           ) : (
                             <ul className="space-y-3">
                               {book.chapters.map((chapter) => (
@@ -706,9 +710,9 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                                           />
                                         </div>
                                       </div>
-                                      <div className="flex gap-2 w-full sm:w-auto justify-end mt-2 sm:mt-0">
-                                        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors">저장</button>
-                                        <button type="button" onClick={() => setEditingChapterId(null)} className="text-blue-400 px-3 py-2 text-sm font-bold hover:text-blue-600 transition-colors">취소</button>
+                                      <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-end mt-2 sm:mt-0">
+                                        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors">{t('common.save')}</button>
+                                        <button type="button" onClick={() => setEditingChapterId(null)} className="text-blue-400 px-3 py-2 text-sm font-bold hover:text-blue-600 transition-colors">{t('common.cancel')}</button>
                                       </div>
                                     </form>
                                   ) : (
@@ -747,7 +751,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                                                 }}
                                                 className="w-full text-left px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-2"
                                               >
-                                                <Edit2 className="w-4 h-4" /> 수정
+                                                <Edit2 className="w-4 h-4" /> {t('common.edit')}
                                               </button>
                                               <button
                                                 onClick={() => {
@@ -756,7 +760,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                                                 }}
                                                 className="w-full text-left px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
                                               >
-                                                <Trash2 className="w-4 h-4" /> 삭제
+                                                <Trash2 className="w-4 h-4" /> {t('common.delete')}
                                               </button>
                                             </motion.div>
                                           )}
@@ -780,15 +784,15 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                             </div>
                             <div className="flex-1 w-full relative">
                               <label className="text-[10px] font-bold text-blue-400 uppercase mb-1.5 block">Label (Optional)</label>
-                              <input type="text" value={newBmLabel} onChange={e => setNewBmLabel(e.target.value)} placeholder="예: 중요한 공식" className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-blue-200 dark:border-slate-600 rounded-xl text-sm font-medium text-blue-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-400 focus:outline-none placeholder:text-blue-300 dark:placeholder:text-slate-500" />
+                              <input type="text" value={newBmLabel} onChange={e => setNewBmLabel(e.target.value)} placeholder={t('bookManager.bookmarkExample')} className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-blue-200 dark:border-slate-600 rounded-xl text-sm font-medium text-blue-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-400 focus:outline-none placeholder:text-blue-300 dark:placeholder:text-slate-500" />
                             </div>
                             <div className="flex gap-2 w-full sm:w-auto justify-end mt-2 sm:mt-0">
-                              <button type="submit" className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-blue-200 dark:shadow-none hover:bg-blue-700 transition-colors">Add</button>
+                              <button type="submit" className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-blue-200 dark:shadow-none hover:bg-blue-700 transition-colors">{t('common.add')}</button>
                             </div>
                           </form>
                           
                           {(!book.bookmarks || book.bookmarks.length === 0) ? (
-                            <div className="text-center py-8 text-sm font-medium text-blue-300">저장된 책갈피가 없습니다.</div>
+                            <div className="text-center py-8 text-sm font-medium text-blue-300">{t('bookManager.noBookmarks')}</div>
                           ) : (
                             <ul className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                               {book.bookmarks.map(bm => (
@@ -810,13 +814,13 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                                           type="text"
                                           value={editBmLabel}
                                           onChange={(e) => setEditBmLabel(e.target.value)}
-                                          placeholder="예: 중요한 공식"
+                                          placeholder={t('bookManager.bookmarkExample')}
                                           className="w-full px-4 py-2 bg-white dark:bg-slate-900 border border-blue-200 dark:border-slate-600 rounded-xl text-sm font-medium text-blue-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-400 focus:outline-none"
                                         />
                                       </div>
                                       <div className="flex gap-2 w-full sm:w-auto justify-end mt-2 sm:mt-0">
-                                        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors">저장</button>
-                                        <button type="button" onClick={() => setEditingBookmarkId(null)} className="text-blue-400 px-3 py-2 text-sm font-bold hover:text-blue-600 transition-colors">취소</button>
+                                        <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors">{t('common.save')}</button>
+                                        <button type="button" onClick={() => setEditingBookmarkId(null)} className="text-blue-400 px-3 py-2 text-sm font-bold hover:text-blue-600 transition-colors">{t('common.cancel')}</button>
                                       </div>
                                     </form>
                                   ) : (
@@ -847,7 +851,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                                                 }}
                                                 className="w-full text-left px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-2"
                                               >
-                                                <Edit2 className="w-4 h-4" /> 수정
+                                                <Edit2 className="w-4 h-4" /> {t('common.edit')}
                                               </button>
                                               <button
                                                 onClick={() => {
@@ -856,7 +860,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                                                 }}
                                                 className="w-full text-left px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
                                               >
-                                                <Trash2 className="w-4 h-4" /> 삭제
+                                                <Trash2 className="w-4 h-4" /> {t('common.delete')}
                                               </button>
                                             </motion.div>
                                           )}
@@ -880,7 +884,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                             </div>
                             <div className="flex-1 w-full relative">
                               <label className="text-[10px] font-bold text-blue-400 uppercase mb-1.5 block">Note</label>
-                              <input type="text" value={newNoteContent} onChange={e => setNewNoteContent(e.target.value)} required placeholder="학습 내용을 기록하세요..." className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-blue-200 dark:border-slate-600 rounded-xl text-sm font-medium text-blue-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-400 focus:outline-none placeholder:text-blue-300 dark:placeholder:text-slate-500" />
+                              <input type="text" value={newNoteContent} onChange={e => setNewNoteContent(e.target.value)} required placeholder={t('bookManager.notePlaceholder')} className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-blue-200 dark:border-slate-600 rounded-xl text-sm font-medium text-blue-900 dark:text-slate-100 focus:ring-2 focus:ring-blue-400 focus:outline-none placeholder:text-blue-300 dark:placeholder:text-slate-500" />
                             </div>
                             <div className="flex gap-2 w-full sm:w-auto justify-end mt-2 sm:mt-0">
                               <button type="submit" className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-blue-200 dark:shadow-none hover:bg-blue-700 transition-colors">Save</button>
@@ -888,7 +892,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                           </form>
                           
                           {(!book.notes || book.notes.length === 0) ? (
-                            <div className="text-center py-8 text-sm font-medium text-blue-300">작성된 메모가 없습니다.</div>
+                            <div className="text-center py-8 text-sm font-medium text-blue-300">{t('bookManager.noNotes')}</div>
                           ) : (
                             <ul className="space-y-3">
                               {book.notes.map(note => (
@@ -910,14 +914,14 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                                           type="text"
                                           value={editNoteContent}
                                           onChange={(e) => setEditNoteContent(e.target.value)}
-                                          placeholder="학습 내용을 기록하세요..."
+                                          placeholder={t('bookManager.notePlaceholder')}
                                           className="w-full px-4 py-2 bg-white dark:bg-slate-900 border border-yellow-200 dark:border-yellow-900/50 rounded-xl text-sm font-medium text-blue-900 dark:text-slate-100 focus:ring-2 focus:ring-yellow-400 focus:outline-none"
                                           required
                                         />
                                       </div>
                                       <div className="flex gap-2 w-full sm:w-auto justify-end mt-2 sm:mt-0">
-                                        <button type="submit" className="bg-yellow-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-yellow-700 transition-colors">저장</button>
-                                        <button type="button" onClick={() => setEditingNoteId(null)} className="text-yellow-600 dark:text-yellow-500 px-3 py-2 text-sm font-bold hover:text-yellow-700 transition-colors">취소</button>
+                                        <button type="submit" className="bg-yellow-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-yellow-700 transition-colors">{t('common.save')}</button>
+                                        <button type="button" onClick={() => setEditingNoteId(null)} className="text-yellow-600 dark:text-yellow-500 px-3 py-2 text-sm font-bold hover:text-yellow-700 transition-colors">{t('common.cancel')}</button>
                                       </div>
                                     </form>
                                   ) : (
@@ -949,7 +953,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                                                 }}
                                                 className="w-full text-left px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-2"
                                               >
-                                                <Edit2 className="w-4 h-4" /> 수정
+                                                <Edit2 className="w-4 h-4" /> {t('common.edit')}
                                               </button>
                                               <button
                                                 onClick={() => {
@@ -958,7 +962,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                                                 }}
                                                 className="w-full text-left px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
                                               >
-                                                <Trash2 className="w-4 h-4" /> 삭제
+                                                <Trash2 className="w-4 h-4" /> {t('common.delete')}
                                               </button>
                                             </motion.div>
                                           )}
@@ -976,44 +980,44 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                       {detailTab === 'autoGoal' && (
                         <div className="flex flex-col gap-4">
                           <div className="flex justify-between items-center mb-2">
-                            <h4 className="font-bold text-blue-900 dark:text-slate-200 text-sm">자동 목표 리스트</h4>
+                            <h4 className="font-bold text-blue-900 dark:text-slate-200 text-sm">{t('bookManager.autoGoalListTitle')}</h4>
                             <button onClick={() => handleEditAutoGoalBtn(book, 'NEW')} className="text-xs font-bold text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 bg-blue-50 dark:bg-slate-700 px-3 py-1.5 rounded-lg transition-colors">
-                              + 새 도전 생성
+                              {t('bookManager.createAutoGoal')}
                             </button>
                           </div>
 
                           {editingAg?.bookId === book.id && (
                             <div className="bg-blue-50/50 dark:bg-slate-800/50 p-5 rounded-2xl mb-4 border border-blue-100 dark:border-slate-700 flex flex-col gap-4">
                               <div>
-                                <label className="text-[10px] font-bold text-blue-400 uppercase mb-1.5 block">도전 교재</label>
+                                <label className="text-[10px] font-bold text-blue-400 uppercase mb-1.5 block">{t('bookManager.challengeBook')}</label>
                                 <div className="w-full px-4 py-2.5 bg-white/50 dark:bg-slate-900/50 border border-blue-200/50 dark:border-slate-600/50 rounded-xl text-sm font-bold text-blue-900/70 dark:text-slate-400">
                                   {book.title}
                                 </div>
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                  <label className="text-[10px] font-bold text-blue-400 uppercase mb-1.5 block">도전 시작일</label>
+                                  <label className="text-[10px] font-bold text-blue-400 uppercase mb-1.5 block">{t('bookManager.challengeStartDate')}</label>
                                   <input type="date" value={agStartDate} onChange={e => setAgStartDate(e.target.value)} className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-blue-200 dark:border-slate-600 rounded-xl text-sm font-bold text-blue-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-400" />
                                 </div>
                                 <div>
-                                  <label className="text-[10px] font-bold text-blue-400 uppercase mb-1.5 block">도전 종료일</label>
+                                  <label className="text-[10px] font-bold text-blue-400 uppercase mb-1.5 block">{t('bookManager.challengeEndDate')}</label>
                                   <input type="date" value={agEndDate} onChange={e => setAgEndDate(e.target.value)} className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-blue-200 dark:border-slate-600 rounded-xl text-sm font-bold text-blue-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-400" />
                                 </div>
                               </div>
                               <div>
-                                <label className="text-[10px] font-bold text-blue-400 uppercase mb-1.5 block">목표 회독수</label>
+                                <label className="text-[10px] font-bold text-blue-400 uppercase mb-1.5 block">{t('bookManager.targetIterations')}</label>
                                 <input type="number" min="1" value={agIterations} onChange={e => setAgIterations(e.target.value)} className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-blue-200 dark:border-slate-600 rounded-xl text-sm font-bold text-blue-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-400" />
                               </div>
                               {book.chapters && book.chapters.length > 0 && (
                                 <div>
                                   <label className="text-[10px] font-bold text-blue-400 uppercase mb-1 flex justify-between items-center">
-                                    <span>도전 챕터 (선택: {agTargetChapterIds.length}개)</span>
+                                    <span>{t('bookManager.challengeChapters', { count: agTargetChapterIds.length })}</span>
                                     <button 
                                       type="button" 
                                       onClick={() => setAgTargetChapterIds(agTargetChapterIds.length === 0 ? book.chapters!.map(c => c.id) : [])} 
                                       className="text-blue-500 hover:underline"
                                     >
-                                      {agTargetChapterIds.length === 0 ? '전체 선택' : '전체 해제'}
+                                      {agTargetChapterIds.length === 0 ? t('bookManager.selectAll') : t('bookManager.deselectAll')}
                                     </button>
                                   </label>
                                   <div className="max-h-40 overflow-y-auto space-y-1 bg-white/50 dark:bg-slate-900/50 p-2 rounded-xl border border-blue-200/50 dark:border-slate-600/50">
@@ -1042,8 +1046,8 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                                 </div>
                               )}
                               <div className="flex gap-2 justify-end mt-2">
-                                <button type="button" onClick={() => handleSaveAutoGoal(book.id)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors shadow-md shadow-blue-200 dark:shadow-none">저장</button>
-                                <button type="button" onClick={() => setEditingAg(null)} className="text-blue-500 font-bold px-3 py-2.5 text-sm hover:text-blue-700 dark:hover:text-blue-300 transition-colors">취소</button>
+                                <button type="button" onClick={() => handleSaveAutoGoal(book.id)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors shadow-md shadow-blue-200 dark:shadow-none">{t('common.save')}</button>
+                                <button type="button" onClick={() => setEditingAg(null)} className="text-blue-500 font-bold px-3 py-2.5 text-sm hover:text-blue-700 dark:hover:text-blue-300 transition-colors">{t('common.cancel')}</button>
                               </div>
                             </div>
                           )}
@@ -1056,7 +1060,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                                     <div className="flex justify-between items-center pb-3 border-b border-blue-50 dark:border-slate-700">
                                       <div className="flex items-center gap-3">
                                         <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
-                                          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">ON / OFF</span>
+                                          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{t('bookManager.onOffLabel')}</span>
                                           <button 
                                             onClick={() => handleToggleAutoGoal(book.id, ag.id)} 
                                             className={cn(
@@ -1074,29 +1078,29 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                                           </button>
                                         </div>
                                         <span className={cn("text-xs font-bold px-2 py-1 rounded-md", ag.enabled ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-400" : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400")}>
-                                          {ag.enabled ? '진행 중' : '중지됨'}
+                                          {ag.enabled ? t('bookManager.inProgress') : t('bookManager.stopped')}
                                         </span>
                                       </div>
                                       <div className="flex items-center gap-2">
-                                        <button onClick={() => handleEditAutoGoalBtn(book, ag.id)} className="text-xs font-bold text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 bg-blue-50 dark:bg-slate-700 px-3 py-1.5 rounded-lg transition-colors">수정</button>
-                                        <button onClick={() => handleDeleteAutoGoal(book.id, ag.id)} className="text-xs font-bold text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 bg-red-50 dark:bg-red-900/20 px-3 py-1.5 rounded-lg transition-colors">삭제</button>
+                                        <button onClick={() => handleEditAutoGoalBtn(book, ag.id)} className="text-xs font-bold text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 bg-blue-50 dark:bg-slate-700 px-3 py-1.5 rounded-lg transition-colors">{t('common.edit')}</button>
+                                        <button onClick={() => handleDeleteAutoGoal(book.id, ag.id)} className="text-xs font-bold text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 bg-red-50 dark:bg-red-900/20 px-3 py-1.5 rounded-lg transition-colors">{t('common.delete')}</button>
                                       </div>
                                     </div>
                                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm mt-1">
                                       <div className="flex flex-col gap-1">
-                                        <span className="text-xs font-bold text-slate-400">시작일</span>
+                                        <span className="text-xs font-bold text-slate-400">{t('bookManager.startDate')}</span>
                                         <span className="font-bold text-slate-700 dark:text-slate-200">{ag.startDate}</span>
                                       </div>
                                       <div className="flex flex-col gap-1">
-                                        <span className="text-xs font-bold text-slate-400">종료일</span>
+                                        <span className="text-xs font-bold text-slate-400">{t('bookManager.endDate')}</span>
                                         <span className="font-bold text-slate-700 dark:text-slate-200">{ag.endDate}</span>
                                       </div>
                                       <div className="flex flex-col gap-1">
-                                        <span className="text-xs font-bold text-slate-400">목표 회독수</span>
-                                        <span className="font-bold text-slate-700 dark:text-slate-200">{ag.iterations}회독</span>
+                                        <span className="text-xs font-bold text-slate-400">{t('bookManager.targetIterations')}</span>
+                                        <span className="font-bold text-slate-700 dark:text-slate-200">{ag.iterations}{t('bookManager.iterationsSuffix')}</span>
                                       </div>
                                       <div className="flex flex-col gap-1">
-                                        <span className="text-xs font-bold text-blue-500">일일 달성 분량</span>
+                                        <span className="text-xs font-bold text-blue-500">{t('bookManager.dailyTargetVolume')}</span>
                                         <span className="font-black text-blue-600 dark:text-blue-400 text-xl">{ag.dailyPages}p</span>
                                       </div>
                                     </div>
@@ -1107,7 +1111,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                           ) : (
                             (!editingAg || editingAg.bookId !== book.id) && (
                               <div className="text-center py-8 text-sm font-medium text-blue-300 dark:text-slate-500">
-                                등록된 자동 도전 목표가 없습니다.<br/>도전을 생성하여 목표를 달성해 보세요!
+                                {t('bookManager.noAutoGoals')}
                               </div>
                             )
                           )}
@@ -1116,15 +1120,15 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                       
                       <div className="mt-8 pt-6 border-t border-blue-50 dark:border-slate-700/50 flex justify-end gap-2">
                          {confirmDeleteBookId === book.id && (
-                           <button onClick={() => setConfirmDeleteBookId(null)} className="text-[10px] font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-3 py-1.5 rounded-lg transition-colors border border-slate-200 dark:border-slate-600 uppercase tracking-wider">
-                              취소
-                           </button>
+                          <button onClick={() => setConfirmDeleteBookId(null)} className="text-[10px] font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-3 py-1.5 rounded-lg transition-colors border border-slate-200 dark:border-slate-600 uppercase tracking-wider">
+                            {t('common.cancel')}
+                          </button>
                          )}
                          <button onClick={() => copyBook(book)} className="text-[10px] font-bold text-emerald-500 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/10 dark:hover:bg-emerald-900/30 border border-transparent px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wider mr-2">
                             <Copy className="w-3.5 h-3.5" /> Copy
                          </button>
                          <button onClick={() => deleteBook(book.id)} className="text-[10px] font-bold text-red-400 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 bg-red-50 hover:bg-red-100 dark:bg-red-900/10 dark:hover:bg-red-900/30 border border-transparent px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wider">
-                            {confirmDeleteBookId === book.id ? '정말 삭제할까요?' : <><Trash2 className="w-3.5 h-3.5" /> Delete Book</>}
+                           {confirmDeleteBookId === book.id ? t('bookManager.confirmDeleteBook') : <><Trash2 className="w-3.5 h-3.5" /> {t('bookManager.deleteBook')}</>}
                          </button>
                       </div>
                     </motion.div>
@@ -1142,7 +1146,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
             <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
               <h3 className="text-xl font-bold flex items-center gap-2 text-slate-800 dark:text-slate-100">
                 <Trash2 className="w-6 h-6 text-slate-400" />
-                휴지통
+                {t('bookManager.trash')}
               </h3>
               <button onClick={() => setShowTrashModal(false)} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors">
                 <X className="w-6 h-6 text-slate-400" />
@@ -1152,44 +1156,48 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
             <div className="p-6 overflow-y-auto max-h-[60vh] bg-slate-50 dark:bg-slate-900">
               {trashedBooks.length === 0 ? (
                 <div className="text-center py-12 text-slate-400 font-bold">
-                  휴지통이 비어 있습니다.
+                  {t('bookManager.trashEmpty')}
                 </div>
               ) : (
                 <div className="flex flex-col gap-4">
                   <div className="flex justify-end mb-2">
                     <button 
                       onClick={() => {
-                        if (window.confirm("휴지통의 모든 도서를 영구적으로 삭제하시겠습니까? (이 작업은 되돌릴 수 없습니다.)")) {
+                        let proceed = true;
+                        try { proceed = window.confirm(t('bookManager.confirm.emptyTrash')); } catch(e) { proceed = true; }
+                        if (proceed) {
                           setBooks(prev => prev.filter(b => !b.isTrash));
                         }
                       }}
                       className="text-xs font-bold text-red-500 hover:text-red-700 hover:underline"
                     >
-                      휴지통 비우기
+                      {t('bookManager.emptyTrash')}
                     </button>
                   </div>
                   {trashedBooks.map(book => (
                     <div key={book.id} className="bg-white dark:bg-slate-800 p-4 border border-slate-200 dark:border-slate-700 rounded-2xl flex justify-between items-center shadow-sm">
                       <div className="flex flex-col">
                         <span className="font-bold text-slate-800 dark:text-slate-200 text-lg mb-1">{book.title}</span>
-                        <span className="text-xs font-medium text-slate-400">총 페이지 수: {book.chapters?.reduce((acc, ch) => acc + ch.endPage - ch.startPage + 1, 0) || 0}p</span>
+                        <span className="text-xs font-medium text-slate-400">{t('bookManager.totalPages', { count: book.chapters?.reduce((acc, ch) => acc + ch.endPage - ch.startPage + 1, 0) || 0 })}</span>
                       </div>
                       <div className="flex gap-2">
                         <button 
                           onClick={() => setBooks(prev => prev.map(b => b.id === book.id ? { ...b, isTrash: false } : b))}
                           className="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 px-4 py-2 rounded-xl text-sm font-bold transition-colors"
                         >
-                          복구
+                          {t('bookManager.restore')}
                         </button>
                         <button 
                           onClick={() => {
-                            if (window.confirm("정말 영구적으로 삭제하시겠습니까?")) {
+                            let proceed = true;
+                            try { proceed = window.confirm(t('bookManager.confirm.permanentDelete')); } catch(e) { proceed = true; }
+                            if (proceed) {
                               setBooks(prev => prev.filter(b => b.id !== book.id));
                             }
                           }}
                           className="bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 px-4 py-2 rounded-xl text-sm font-bold transition-colors"
                         >
-                          영구 삭제
+                          {t('bookManager.permanentDelete')}
                         </button>
                       </div>
                     </div>
@@ -1203,7 +1211,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                 onClick={() => setShowTrashModal(false)}
                 className="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold px-6 py-2.5 rounded-xl transition-colors hover:bg-slate-200 dark:hover:bg-slate-600"
               >
-                닫기
+                {t('pomodoro.close')}
               </button>
             </div>
           </div>

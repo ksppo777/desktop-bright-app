@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { StudySession } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { format, subDays, parseISO, isSameDay, startOfWeek, startOfMonth, endOfMonth, isAfter, addDays, getDay, startOfDay } from 'date-fns';
-import { ko } from 'date-fns/locale';
+import { ko, enUS, ja as jaLocale } from 'date-fns/locale';
 import { X, CheckCircle2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import TodayPlan from './TodayPlan';
+import { useTranslation } from 'react-i18next';
 
 interface StatisticsProps {
   sessions: StudySession[];
@@ -21,6 +22,8 @@ interface StatisticsProps {
 }
 
 export default function Statistics({ sessions, realTimeAddedSeconds = 0, weeklyPlans, setWeeklyPlans, dailyGoalMinutes, setDailyGoalMinutes, books = [], setActiveTab, autoGoalDisplayMode = 'multiple' }: StatisticsProps) {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language === 'ja' ? jaLocale : i18n.language === 'en' ? enUS : ko;
   const [showWeeklyModal, setShowWeeklyModal] = useState(false);
   const [showMonthlyModal, setShowMonthlyModal] = useState(false);
   const [showPastPlansModal, setShowPastPlansModal] = useState(false);
@@ -43,7 +46,7 @@ export default function Statistics({ sessions, realTimeAddedSeconds = 0, weeklyP
     const minutes = Math.floor(totalSeconds / 60);
 
     return {
-      date: format(day, 'MMM d일 (E)', { locale: ko }),
+      date: format(day, 'MMM d (E)', { locale: dateLocale }),
       shortDate: format(day, 'dd'),
       minutes: Number((totalSeconds / 60).toFixed(1)),
       seconds: totalSeconds,
@@ -83,7 +86,7 @@ export default function Statistics({ sessions, realTimeAddedSeconds = 0, weeklyP
     const minutes = Math.floor(seconds / 60);
     return {
       date: day,
-      dayStr: format(day, 'EEEE', { locale: ko }),
+      dayStr: format(day, 'EEEE', { locale: dateLocale }),
       minutes,
       seconds,
       progress: dailyGoalMinutes > 0 ? Math.min(100, Math.round((seconds / 60 / dailyGoalMinutes) * 100)) : 0
@@ -124,38 +127,38 @@ export default function Statistics({ sessions, realTimeAddedSeconds = 0, weeklyP
     <div className="w-full max-w-5xl mx-auto space-y-6 transition-colors">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white dark:bg-slate-800 border border-blue-50 dark:border-slate-700 p-6 rounded-3xl shadow-xl shadow-blue-900/5 dark:shadow-none flex flex-col justify-center">
-          <span className="text-blue-400 dark:text-slate-400 font-bold text-[10px] uppercase mb-1">🔥 연속 학습일</span>
+          <span className="text-blue-400 dark:text-slate-400 font-bold text-[10px] uppercase mb-1">{t('statistics.streakTitle')}</span>
           <div className="flex items-baseline gap-2">
             <span className="text-4xl font-black tracking-tight text-orange-500">{streak}</span>
-            <span className="text-blue-300 dark:text-slate-500 font-bold uppercase text-[10px]">Days</span>
+            <span className="text-blue-300 dark:text-slate-500 font-bold uppercase text-[10px]">{t('statistics.streakUnit')}</span>
           </div>
         </div>
         <div className="bg-white dark:bg-slate-800 border border-blue-50 dark:border-slate-700 p-6 rounded-3xl shadow-xl shadow-blue-900/5 dark:shadow-none flex flex-col justify-center">
-          <span className="text-blue-400 dark:text-slate-400 font-bold text-[10px] uppercase mb-1">⏱️ 오늘 집중한 시간</span>
+          <span className="text-blue-400 dark:text-slate-400 font-bold text-[10px] uppercase mb-1">{t('statistics.todayFocus')}</span>
           <div className="flex items-baseline gap-1.5">
             <span className="text-4xl font-black tracking-tight text-emerald-500">
-              {Math.floor(todaySeconds / 3600)}<span className="text-2xl ml-0.5 text-emerald-400">h</span>
+              {Math.floor(todaySeconds / 3600)}<span className="text-2xl ml-0.5 text-emerald-400">{t('statistics.hourShort')}</span>
             </span>
             <span className="text-4xl font-black tracking-tight text-emerald-500">
-              {Math.floor((todaySeconds % 3600) / 60)}<span className="text-2xl ml-0.5 text-emerald-400">m</span>
+              {Math.floor((todaySeconds % 3600) / 60)}<span className="text-2xl ml-0.5 text-emerald-400">{t('statistics.minuteShort')}</span>
             </span>
             <span className="text-4xl font-black tracking-tight text-emerald-500">
-              {todaySeconds % 60}<span className="text-2xl ml-0.5 text-emerald-400">s</span>
+              {todaySeconds % 60}<span className="text-2xl ml-0.5 text-emerald-400">{t('statistics.secondShort')}</span>
             </span>
           </div>
         </div>
         <div className="bg-white dark:bg-slate-800 border border-blue-50 dark:border-slate-700 p-6 rounded-3xl shadow-xl shadow-blue-900/5 dark:shadow-none flex flex-col justify-center">
-          <span className="text-blue-400 dark:text-slate-400 font-bold text-[10px] uppercase mb-1">📚 누적 학습 시간</span>
+          <span className="text-blue-400 dark:text-slate-400 font-bold text-[10px] uppercase mb-1">{t('statistics.totalStudy')}</span>
           <div className="flex items-baseline gap-2">
              <span className="text-4xl font-black tracking-tight text-blue-500">{(totalMinutesAllTime / 60).toFixed(1)}</span>
-             <span className="text-blue-300 dark:text-slate-500 font-bold uppercase text-[10px]">Hours</span>
+             <span className="text-blue-300 dark:text-slate-500 font-bold uppercase text-[10px]">{t('statistics.totalUnit')}</span>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3 bg-white dark:bg-slate-800 border border-blue-50 dark:border-slate-700 p-6 sm:p-8 rounded-3xl shadow-xl shadow-blue-900/5 dark:shadow-none">
-          <h3 className="text-lg font-bold text-blue-900 dark:text-slate-100 mb-6">최근 7일 학습 시간 (분)</h3>
+          <h3 className="text-lg font-bold text-blue-900 dark:text-slate-100 mb-6">{t('statistics.last7daysTitle')}</h3>
           <div className="h-64 sm:h-80 w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <BarChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
@@ -179,8 +182,8 @@ export default function Statistics({ sessions, realTimeAddedSeconds = 0, weeklyP
                     const h = Math.floor(totalSecs / 3600);
                     const m = Math.floor((totalSecs % 3600) / 60);
                     const s = totalSecs % 60;
-                    if (h > 0) return [`${h}시간 ${m}분 ${s}초`, '학습 시간'];
-                    return [`${m}분 ${s}초`, '학습 시간'];
+                    if (h > 0) return [t('statistics.timeWithHours', { h, m, s }), t('statistics.studyTime')];
+                    return [t('statistics.timeNoHours', { m, s }), t('statistics.studyTime')];
                   }}
                   labelFormatter={(label) => {
                     const dayData = chartData.find(d => d.shortDate === label);
@@ -203,17 +206,17 @@ export default function Statistics({ sessions, realTimeAddedSeconds = 0, weeklyP
             className="cursor-pointer bg-white dark:bg-slate-800 border border-blue-50 dark:border-slate-700 p-6 rounded-3xl shadow-xl shadow-blue-900/5 dark:shadow-none flex-1 flex flex-col justify-center hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors group"
           >
             <h4 className="text-blue-900 dark:text-slate-100 font-bold mb-4 flex items-center gap-2 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>주간 통계
+              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>{t('statistics.weeklyStats')}
             </h4>
             <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">이번 주 누적 시간</span>
+              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{t('statistics.thisWeekTotal')}</span>
               <div className="text-2xl sm:text-3xl font-black text-indigo-600 dark:text-indigo-400 flex items-baseline">
                 {Math.floor(weekSeconds / 3600)}<span className="text-lg sm:text-xl text-indigo-400 dark:text-indigo-500 mx-1">h</span>
                 {Math.floor((weekSeconds % 3600) / 60)}<span className="text-lg sm:text-xl text-indigo-400 dark:text-indigo-500 mx-1">m</span>
                 {weekSeconds % 60}<span className="text-lg sm:text-xl text-indigo-400 dark:text-indigo-500 ml-1">s</span>
               </div>
             </div>
-            <span className="text-[10px] font-bold text-indigo-400 uppercase mt-4 opacity-0 group-hover:opacity-100 transition-opacity">클릭해서 요일표 보기 →</span>
+            <span className="text-[10px] font-bold text-indigo-400 uppercase mt-4 opacity-0 group-hover:opacity-100 transition-opacity">{t('statistics.clickShowWeek')}</span>
           </div>
           
           <div 
@@ -221,17 +224,17 @@ export default function Statistics({ sessions, realTimeAddedSeconds = 0, weeklyP
             className="cursor-pointer bg-white dark:bg-slate-800 border border-blue-50 dark:border-slate-700 p-6 rounded-3xl shadow-xl shadow-blue-900/5 dark:shadow-none flex-1 flex flex-col justify-center hover:border-violet-300 dark:hover:border-violet-600 transition-colors group"
           >
             <h4 className="text-blue-900 dark:text-slate-100 font-bold mb-4 flex items-center gap-2 group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
-              <span className="w-2 h-2 rounded-full bg-violet-500"></span>월간 통계
+              <span className="w-2 h-2 rounded-full bg-violet-500"></span>{t('statistics.monthlyStats')}
             </h4>
             <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">이번 달 누적 시간</span>
+              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{t('statistics.thisMonthTotal')}</span>
               <div className="text-2xl sm:text-3xl font-black text-violet-600 dark:text-violet-400 flex items-baseline">
                 {Math.floor(monthSeconds / 3600)}<span className="text-lg sm:text-xl text-violet-400 dark:text-violet-500 mx-1">h</span>
                 {Math.floor((monthSeconds % 3600) / 60)}<span className="text-lg sm:text-xl text-violet-400 dark:text-violet-500 mx-1">m</span>
                 {monthSeconds % 60}<span className="text-lg sm:text-xl text-violet-400 dark:text-violet-500 ml-1">s</span>
               </div>
             </div>
-            <span className="text-[10px] font-bold text-violet-400 uppercase mt-4 opacity-0 group-hover:opacity-100 transition-opacity">클릭해서 달력 보기 →</span>
+            <span className="text-[10px] font-bold text-violet-400 uppercase mt-4 opacity-0 group-hover:opacity-100 transition-opacity">{t('statistics.clickShowCalendar')}</span>
           </div>
 
           <div 
@@ -239,12 +242,12 @@ export default function Statistics({ sessions, realTimeAddedSeconds = 0, weeklyP
             className="cursor-pointer bg-white dark:bg-slate-800 border border-blue-50 dark:border-slate-700 p-6 rounded-3xl shadow-xl shadow-blue-900/5 dark:shadow-none flex-1 flex flex-col justify-center hover:border-emerald-300 dark:hover:border-emerald-600 transition-colors group"
           >
             <h4 className="text-blue-900 dark:text-slate-100 font-bold mb-4 flex items-center gap-2 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>지난 학습 계획 살펴보기
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>{t('statistics.pastPlans')}
             </h4>
             <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">과거 목표 및 계획 조회·수정</span>
+              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{t('statistics.viewEditPast')}</span>
             </div>
-            <span className="text-[10px] font-bold text-emerald-400 uppercase mt-4 opacity-0 group-hover:opacity-100 transition-opacity">클릭해서 계획 보기 →</span>
+            <span className="text-[10px] font-bold text-emerald-400 uppercase mt-4 opacity-0 group-hover:opacity-100 transition-opacity">{t('statistics.clickShowPlans')}</span>
           </div>
         </div>
       </div>
@@ -272,8 +275,8 @@ export default function Statistics({ sessions, realTimeAddedSeconds = 0, weeklyP
                 <X className="w-5 h-5" />
               </button>
               
-              <h2 className="text-2xl font-black text-blue-900 dark:text-white mb-2 shrink-0">이번 주 요일표</h2>
-              <p className="text-sm font-medium text-blue-400 dark:text-slate-400 mb-6 shrink-0">목표 대비 공부 시간과 일일 목표를 보여줍니다.</p>
+              <h2 className="text-2xl font-black text-blue-900 dark:text-white mb-2 shrink-0">{t('statistics.thisWeekTitle')}</h2>
+              <p className="text-sm font-medium text-blue-400 dark:text-slate-400 mb-6 shrink-0">{t('statistics.thisWeekDesc')}</p>
 
               <div className="no-swipe overflow-x-auto pb-6 pt-4 -mx-2 px-2 snap-x snap-mandatory [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] flex-1 min-h-[300px]">
                 <div className="flex gap-4 w-max min-w-full h-full">
@@ -283,7 +286,7 @@ export default function Statistics({ sessions, realTimeAddedSeconds = 0, weeklyP
 
                     return (
                       <div key={idx} className={cn("flex flex-col p-5 rounded-3xl border transition-colors relative h-full min-h-[260px] w-64 shrink-0 snap-center shadow-sm", isToday ? "bg-indigo-50/80 dark:bg-indigo-900/40 border-indigo-200 dark:border-indigo-800" : "bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700")}>
-                        {isToday && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-500 text-white text-[10px] font-black px-3 py-1 rounded-full z-10 shadow-sm border border-white dark:border-slate-800 tracking-wider">TODAY</div>}
+                        {isToday && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-500 text-white text-[10px] font-black px-3 py-1 rounded-full z-10 shadow-sm border border-white dark:border-slate-800 tracking-wider">{t('statistics.todayTag')}</div>}
                         
                         <div className="flex flex-col gap-1.5 items-center mb-5 shrink-0">
                           <span className={cn("text-sm font-bold px-3 py-1.5 rounded-xl w-full text-center tracking-tight", isToday ? "bg-indigo-600 text-white shadow-sm" : "bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200")}>
@@ -292,19 +295,19 @@ export default function Statistics({ sessions, realTimeAddedSeconds = 0, weeklyP
                           <span className="text-xs font-black text-slate-400 font-mono">{format(day.date, 'MM/dd')}</span>
                         </div>
                         
-                        <textarea
+                          <textarea
                           value={weeklyPlans[dayKey] || ''}
                           onChange={e => handlePlanChange(dayKey, e.target.value)}
-                          placeholder="구체적인 목표 계획 작성..."
+                          placeholder={t('statistics.planPlaceholder')}
                           className="w-full text-sm font-medium text-slate-600 dark:text-slate-300 bg-transparent border-none focus:outline-none focus:ring-0 resize-none flex-1 placeholder-slate-300 dark:placeholder-slate-600 mb-4"
                         />
                         
                         <div className="mt-auto flex flex-col items-center shrink-0 pt-5 border-t border-slate-100 dark:border-slate-700/50">
                           <span className={cn("text-2xl font-black mb-1 leading-none flex items-baseline gap-0.5 font-mono", day.seconds > 0 ? (day.progress >= 100 ? "text-emerald-500" : "text-indigo-600 dark:text-indigo-400") : "text-slate-300 dark:text-slate-600")}>
-                            {day.minutes}<span className="text-xs opacity-70 font-bold font-sans">분</span>
-                            {day.seconds % 60}<span className="text-xs opacity-70 font-bold font-sans">초</span>
+                            {day.minutes}<span className="text-xs opacity-70 font-bold font-sans">{t('common.minute')}</span>
+                            {day.seconds % 60}<span className="text-xs opacity-70 font-bold font-sans">{t('common.second')}</span>
                           </span>
-                          <span className="text-[10px] font-bold text-slate-400 mb-3 whitespace-nowrap tracking-wider">목표 {dailyGoalMinutes}분</span>
+                          <span className="text-[10px] font-bold text-slate-400 mb-3 whitespace-nowrap tracking-wider">{t('statistics.goal', { minutes: dailyGoalMinutes })}</span>
                           
                           <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden relative">
                             <div 
@@ -344,11 +347,11 @@ export default function Statistics({ sessions, realTimeAddedSeconds = 0, weeklyP
                 <X className="w-5 h-5" />
               </button>
               
-              <h2 className="text-2xl font-black text-blue-900 dark:text-white mb-2">{format(monthStart, 'MM월')} 달력</h2>
-              <p className="text-sm font-medium text-blue-400 dark:text-slate-400 mb-6">일자별 목표 달성 현황을 간략하게 확인하세요.</p>
+              <h2 className="text-2xl font-black text-blue-900 dark:text-white mb-2">{format(monthStart, 'MMMM', { locale: dateLocale })} {t('statistics.calendar')}</h2>
+              <p className="text-sm font-medium text-blue-400 dark:text-slate-400 mb-6">{t('statistics.calendarDesc')}</p>
 
               <div className="grid grid-cols-7 gap-2 mb-2">
-                {['일', '월', '화', '수', '목', '금', '토'].map((day, idx) => (
+                {(t('days.short', { returnObjects: true }) as string[]).map((day: string, idx: number) => (
                   <div key={idx} className="text-center text-xs font-bold text-slate-400 uppercase">{day}</div>
                 ))}
               </div>
@@ -383,8 +386,8 @@ export default function Statistics({ sessions, realTimeAddedSeconds = 0, weeklyP
                       
                       {/* Tooltip on hover */}
                       <div className="absolute inset-x-0 bottom-full mb-2 hidden group-hover:flex flex-col items-center justify-center p-2 bg-slate-800 text-white rounded-lg text-[10px] whitespace-nowrap z-20 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
-                        <span className="font-bold">{day.minutes}분 {day.seconds % 60}초 공부</span>
-                        <span className="text-slate-300">{Math.round(day.progress)}% 달성</span>
+                        <span className="font-bold">{day.minutes}{t('common.minute')} {day.seconds % 60}{t('common.second')} {t('statistics.study')}</span>
+                        <span className="text-slate-300">{Math.round(day.progress)}% {t('statistics.achieved')}</span>
                         <div className="w-2 h-2 bg-slate-800 rotate-45 absolute -bottom-1 left-1/2 -translate-x-1/2"></div>
                       </div>
                     </div>
@@ -405,7 +408,7 @@ export default function Statistics({ sessions, realTimeAddedSeconds = 0, weeklyP
             </button>
             <div className="w-full max-w-4xl mx-auto flex flex-col gap-6 relative z-10 mb-8 pt-4">
               <div className="flex flex-col sm:flex-row items-center gap-4 bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700">
-                <span className="text-lg font-bold text-slate-700 dark:text-slate-200">조회할 과거 날짜 선택:</span>
+                <span className="text-lg font-bold text-slate-700 dark:text-slate-200">{t('statistics.pastDateLabel')}</span>
                 <input 
                   type="date" 
                   value={pastPlansDate} 
@@ -418,7 +421,7 @@ export default function Statistics({ sessions, realTimeAddedSeconds = 0, weeklyP
               <div className={cn("transition-opacity", pastPlansDate === format(new Date(), 'yyyy-MM-dd') ? "opacity-50 pointer-events-none" : "opacity-100")}>
                 {pastPlansDate === format(new Date(), 'yyyy-MM-dd') && (
                   <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
-                    <div className="bg-slate-900/80 text-white font-bold px-6 py-3 rounded-2xl">오늘 날짜는 오늘 계획 탭에서 수정해주세요.</div>
+                    <div className="bg-slate-900/80 text-white font-bold px-6 py-3 rounded-2xl">{t('statistics.todayDateWarning')}</div>
                   </div>
                 )}
                 <TodayPlan 
