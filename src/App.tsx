@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useLocalStorage } from "./lib/utils";
+import { checkAndApplyUpdate } from './supabaseUpdate';
 import { getAllKeys } from "./lib/storage";
 import { Book, StudySession, StudyAlarm } from "./types";
 import { useTranslation } from "react-i18next";
@@ -47,6 +48,10 @@ const AUTO_CLOUD_BACKUP_DEBOUNCE_MS = 8000;
 export default function App() {
   const { t, i18n } = useTranslation();
   
+  useEffect(() => {
+    checkAndApplyUpdate();
+  }, []);
+
   const [books, setBooks, isBooksLoaded] = useLocalStorage<Book[]>(
     "study-helper-books",
     []
