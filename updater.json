@@ -1,11 +1,11 @@
 {
-  "version": "2.2.1601",
-  "notes": "첫 번째 데스크탑 버전입니다.",
+  "version": "2.2.1602",
+  "notes": "아이콘 변경.",
   "pub_date": "2026-06-15T00:00:00Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVROHREU2FRQWI0MTF0M2JBYS9WSDZEUWpPQjE3c3lJcUZmQXV0TkJqbWZCRjNtdEErNGVJMUpOeUlUNFFNVG5xRXg1YjRIVEhBSit3WHVMaHZrekEzMGFPbHVBYVBIakFnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgxNTA2MjcyCWZpbGU6QnJpZ2h0U3R1ZHlfMi4yLjE2MDFfeDY0LXNldHVwLmV4ZQpmQUpGNkJrY3NnWVpocWxDM0lzREsxV3dlZjh6b2dkRWZvUUlSTjFoT0tKYmlUeHpuaGJONmNPeE4yNHFSTWxSS3BIVnlyQ1ZvOFdubHBlRW1Yd3NDdz09Cg==",
-      "url": "https://github.com/ksppo777/desktop-bright-app/releases/download/2.2.1601/BrightStudy_2.2.1601_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVROHREU2FRQWI0MS9ZdkZTS0d1NzdTU1VHTUdqanJ3YWx5SkZoZXQ3cjhwbEFMZnRDZ2N5ajhmUWh1NVhmLzRuME0xT2RIRWV5QXA5SUhqUmJUcURlQmw3L3dpbnpSRUFjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgxNTA2ODQxCWZpbGU6QnJpZ2h0U3R1ZHlfMi4yLjE2MDFfeDY0LXNldHVwLmV4ZQpJZjdkVmVlRE04UjRVUDdvbHZIL2JPZVR2ZGRySHBWY0lpdkpDVUVmbHE0Q2hjcUZyazRwK0EwZGV0aGNJMjVkcW1wZ215cnh1dmJMQkxYTDBQeUtCQT09Cg==",
+      "url": "https://github.com/ksppo777/desktop-bright-app/releases/download/2.2.1602/BrightStudy_2.2.1601_x64-setup.exe"
     }
   }
 }
