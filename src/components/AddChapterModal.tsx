@@ -1,7 +1,8 @@
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Plus, List } from 'lucide-react';
 import { Book } from '../types';
+import { registerBackHandler } from '../lib/backHandler';
 
 interface AddChapterModalProps {
   isOpen: boolean;
@@ -15,6 +16,15 @@ export default function AddChapterModal({ isOpen, book, onClose, onAdd }: AddCha
   const [title, setTitle] = useState('');
   const [startPage, setStartPage] = useState('');
   const [endPage, setEndPage] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      return registerBackHandler(() => {
+        onClose();
+        return true;
+      });
+    }
+  }, [isOpen, onClose]);
 
   if (!isOpen || !book) return null;
 

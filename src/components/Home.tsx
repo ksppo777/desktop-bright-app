@@ -4,6 +4,7 @@ import { Play, Book as BookIcon, Target, TrendingUp, Bell, Clock, X, Flame, Quot
 import { isSameDay, parseISO, differenceInDays } from 'date-fns';
 import { cn, useLocalStorage } from '../lib/utils';
 import { useTranslation } from 'react-i18next';
+import { registerBackHandler } from '../lib/backHandler';
 
 import AddBookModal from './AddBookModal';
 import AddChapterModal from './AddChapterModal';
@@ -142,6 +143,27 @@ export default function Home({ books, setBooks, sessions, alarms, setAlarms, set
     endPage: number;
     mins: number;
   } | null>(null);
+
+  useEffect(() => {
+    if (showManualModal) {
+      return registerBackHandler(() => {
+        setShowManualModal(false);
+        return true;
+      });
+    }
+    if (showAlarmModal) {
+      return registerBackHandler(() => {
+        setShowAlarmModal(false);
+        return true;
+      });
+    }
+    if (manualSyncConfirmData) {
+      return registerBackHandler(() => {
+        setManualSyncConfirmData(null);
+        return true;
+      });
+    }
+  }, [showManualModal, showAlarmModal, manualSyncConfirmData]);
 
   const [newAlarmTime, setNewAlarmTime] = useState('09:00');
   const [newAlarmDays, setNewAlarmDays] = useState<number[]>([]);

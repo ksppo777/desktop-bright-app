@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useLocalStorage } from "./lib/utils";
-import { checkAndApplyUpdate } from './supabaseUpdate';
+import { checkAndApplyUpdate } from "./supabaseUpdate";
 import { getAllKeys } from "./lib/storage";
 import { Book, StudySession, StudyAlarm } from "./types";
 import { useTranslation } from "react-i18next";
@@ -35,11 +35,14 @@ import { motion, AnimatePresence } from "motion/react";
 import { differenceInDays, parseISO } from "date-fns";
 import { autoSyncDrive, createDriveSnapshot } from "./lib/driveSync";
 import { appLog } from "./lib/logger";
+import { handleBackPress, registerBackHandler } from "./lib/backHandler";
 
 let capacitorNotifications: any = null;
-import("./lib/capacitor-notifications").then((m) => {
-  capacitorNotifications = m;
-}).catch(() => {});
+import("./lib/capacitor-notifications")
+  .then((m) => {
+    capacitorNotifications = m;
+  })
+  .catch(() => {});
 
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
@@ -49,7 +52,7 @@ const AUTO_CLOUD_BACKUP_DEBOUNCE_MS = 8000;
 
 export default function App() {
   const { t, i18n } = useTranslation();
-  
+
   useEffect(() => {
     checkAndApplyUpdate();
   }, []);
@@ -103,10 +106,11 @@ export default function App() {
   const [preventWordWrap, setPreventWordWrap, isWordWrapLoaded] =
     useLocalStorage<boolean>("study-helper-word-wrap", false);
 
-  const [hasSeenPermissionWizard, setHasSeenPermissionWizard, isWizardFlagLoaded] = useLocalStorage<boolean>(
-    "study-helper-seen-wizard",
-    false
-  );
+  const [
+    hasSeenPermissionWizard,
+    setHasSeenPermissionWizard,
+    isWizardFlagLoaded,
+  ] = useLocalStorage<boolean>("study-helper-seen-wizard", false);
   const [showNavLabelsMobile, setShowNavLabelsMobile, isNavLabelsLoaded] =
     useLocalStorage<boolean>("study-helper-nav-labels", false);
   const [dDaySize, setDDaySize, isDDaySizeLoaded] = useLocalStorage<number>(
@@ -117,18 +121,65 @@ export default function App() {
   const [autoBackupStatus, setAutoBackupStatus] =
     useState<string>("자동 백업 대기 중");
 
-  const [hideHeroText, setHideHeroText, isHideHeroLoaded] = useLocalStorage<boolean>("study-helper-hide-hero", false);
+  const [hideHeroText, setHideHeroText, isHideHeroLoaded] =
+    useLocalStorage<boolean>("study-helper-hide-hero", false);
 
-  const [localDataTimestamp, setLocalDataTimestamp, isLocalTimestampLoaded] = useLocalStorage<number>("study-helper-timestamp", Date.now());
-  const [syncNetworkPreference, setSyncNetworkPreference, isSyncNetworkLoaded] = useLocalStorage<"all" | "wifi_only">("study-helper-network-pref", "all");
-  const [language, setLanguage, isLanguageLoaded] = useLocalStorage<string | null>("study-helper-language", null);
+  const [localDataTimestamp, setLocalDataTimestamp, isLocalTimestampLoaded] =
+    useLocalStorage<number>("study-helper-timestamp", Date.now());
+  const [syncNetworkPreference, setSyncNetworkPreference, isSyncNetworkLoaded] =
+    useLocalStorage<"all" | "wifi_only">("study-helper-network-pref", "all");
+  const [language, setLanguage, isLanguageLoaded] = useLocalStorage<
+    string | null
+  >("study-helper-language", null);
   const [isNewInstallCheckDone, setIsNewInstallCheckDone] = useState(false);
+  const [showAppExitModal, setShowAppExitModal] = useState(false);
+
+  useEffect(() => {
+    let unregisterCapacitor: any;
+    if (Capacitor.isNativePlatform()) {
+      CapApp.addListener("backButton", async () => {
+        const handled = await handleBackPress();
+        if (!handled) {
+          setShowAppExitModal(true);
+        }
+      }).then((listener) => (unregisterCapacitor = listener));
+    }
+
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        const handled = await handleBackPress();
+        if (!handled) {
+          setShowAppExitModal(true);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      if (unregisterCapacitor) {
+        unregisterCapacitor.remove();
+      }
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (showAppExitModal) {
+      return registerBackHandler(() => {
+        setShowAppExitModal(false);
+        return true;
+      });
+    }
+  }, [showAppExitModal]);
 
   useEffect(() => {
     if (isLanguageLoaded) {
       if (language === null) {
         getAllKeys().then((keys) => {
-          const isUpdate = keys.some(k => k.startsWith("study-helper-") && k !== "study-helper-language");
+          const isUpdate = keys.some(
+            (k) =>
+              k.startsWith("study-helper-") && k !== "study-helper-language"
+          );
           if (isUpdate) {
             setLanguage("ko");
           }
@@ -183,11 +234,26 @@ export default function App() {
       showNavLabelsMobile,
       dDaySize,
       language,
-      hideHeroText
+      hideHeroText,
     }),
-    [books, sessions, alarms, isDarkMode, weeklyPlans, monthlyPlans, dailyGoalMinutes, autoGoalDisplayMode, dDay, globalFontSize, preventWordWrap, showNavLabelsMobile, dDaySize, language, hideHeroText]
+    [
+      books,
+      sessions,
+      alarms,
+      isDarkMode,
+      weeklyPlans,
+      monthlyPlans,
+      dailyGoalMinutes,
+      autoGoalDisplayMode,
+      dDay,
+      globalFontSize,
+      preventWordWrap,
+      showNavLabelsMobile,
+      dDaySize,
+      language,
+      hideHeroText,
+    ]
   );
-
 
   const autoBackupEnabledRef = useRef(false);
   const autoBackupTimerRef = useRef<number | null>(null);
@@ -277,16 +343,62 @@ export default function App() {
   });
   const [timerBookId, setTimerBookId] = useState<string>("");
   const [timerChapterId, setTimerChapterId] = useState<string>("");
-  const [timerAlertMode, setTimerAlertMode] = useState<"sound" | "vibrate" | "both" | "off">("sound");
-  const [timerEndNotification, setTimerEndNotification] = useState<"focus_ended" | "break_ended" | null>(null);
-  const [activeAlarmNotification, setActiveAlarmNotification] = useState<StudyAlarm | null>(null);
+  const [timerAlertMode, setTimerAlertMode] = useState<
+    "sound" | "vibrate" | "both" | "off"
+  >("sound");
+  const [timerEndNotification, setTimerEndNotification] = useState<
+    "focus_ended" | "break_ended" | null
+  >(null);
+  const [activeAlarmNotification, setActiveAlarmNotification] =
+    useState<StudyAlarm | null>(null);
+
+  useEffect(() => {
+    if (timerEndNotification) {
+      return registerBackHandler(() => {
+        const nextMode =
+          timerEndNotification === "focus_ended" ? "break" : "focus";
+        setTimerMode(nextMode);
+        setTimeLeft(
+          nextMode === "break"
+            ? 5 * 60
+            : timerType === "beginner"
+            ? 25 * 60
+            : expertTime.hours * 3600 +
+              expertTime.minutes * 60 +
+              expertTime.seconds
+        );
+        setTimerEndNotification(null);
+        setIsActive(true); // Automatically start next phase upon clicking OK
+        return true;
+      });
+    }
+  }, [
+    timerEndNotification,
+    timerType,
+    expertTime,
+    setTimerMode,
+    setTimeLeft,
+    setTimerEndNotification,
+    setIsActive,
+  ]);
+
+  useEffect(() => {
+    if (activeAlarmNotification) {
+      return registerBackHandler(() => {
+        setActiveAlarmNotification(null);
+        return true;
+      });
+    }
+  }, [activeAlarmNotification, setActiveAlarmNotification]);
 
   const playSystemAlert = (mode: "sound" | "vibrate" | "both" | "off") => {
     if (Capacitor.isNativePlatform()) {
       SystemHelper.bringToFront().catch(() => {});
     }
     if (mode === "sound" || mode === "both") {
-      const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
+      const audio = new Audio(
+        "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"
+      );
       audio.play().catch(() => {});
     }
     if (mode === "vibrate" || mode === "both") {
@@ -308,7 +420,7 @@ export default function App() {
   const timerStateRef = useRef({
     isActive,
     timeLeft,
-    timerMode
+    timerMode,
   });
 
   useEffect(() => {
@@ -317,24 +429,30 @@ export default function App() {
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
-    
-    const listener = CapApp.addListener('appStateChange', ({ isActive: appActive }) => {
-      const { isActive, timeLeft, timerMode } = timerStateRef.current;
-      if (!appActive) {
-        // App went to background
-        if (isActive && timeLeft > 0 && capacitorNotifications) {
-          capacitorNotifications.scheduleTimerNotification(timeLeft, timerMode);
-        }
-      } else {
-        // App came to foreground
-        if (capacitorNotifications) {
-          capacitorNotifications.cancelTimerNotification();
+
+    const listener = CapApp.addListener(
+      "appStateChange",
+      ({ isActive: appActive }) => {
+        const { isActive, timeLeft, timerMode } = timerStateRef.current;
+        if (!appActive) {
+          // App went to background
+          if (isActive && timeLeft > 0 && capacitorNotifications) {
+            capacitorNotifications.scheduleTimerNotification(
+              timeLeft,
+              timerMode
+            );
+          }
+        } else {
+          // App came to foreground
+          if (capacitorNotifications) {
+            capacitorNotifications.cancelTimerNotification();
+          }
         }
       }
-    });
+    );
 
     return () => {
-      listener.then(l => l.remove());
+      listener.then((l) => l.remove());
     };
   }, []);
 
@@ -398,18 +516,18 @@ export default function App() {
     }
 
     setSessions((prev) => [...prev, baseSession]);
-    appLog('INFO', 'Study session added', baseSession);
+    appLog("INFO", "Study session added", baseSession);
   };
 
   const updateSession = (id: string, updates: Partial<StudySession>) => {
     setSessions((prev) =>
       prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
     );
-    appLog('INFO', 'Study session updated', { id, updates });
+    appLog("INFO", "Study session updated", { id, updates });
   };
 
   const deleteSession = (id: string) => {
-    appLog('INFO', 'Study session deleted', { id });
+    appLog("INFO", "Study session deleted", { id });
     const session = sessions.find((s) => s.id === id);
     if (session && session.timetableBlockId && session.timetableDate) {
       import("./lib/timetableUtils").then(async (utils) => {
@@ -429,7 +547,10 @@ export default function App() {
     let interval: any;
     if (isActive && timeLeft > 0) {
       if (Capacitor.isNativePlatform()) {
-        SystemHelper.startForegroundService({ title: "Bright Study", text: "타이머 진행..." }).catch(() => {});
+        SystemHelper.startForegroundService({
+          title: "Bright Study",
+          text: "타이머 진행...",
+        }).catch(() => {});
       }
       const endTime = Date.now() + timeLeft * 1000;
       interval = setInterval(() => {
@@ -438,7 +559,9 @@ export default function App() {
         if (Capacitor.isNativePlatform() && nextTime > 0) {
           const m = Math.floor(nextTime / 60);
           const s = nextTime % 60;
-          SystemHelper.updateForegroundService({ text: `${m}분 ${s}초 남음` }).catch(() => {});
+          SystemHelper.updateForegroundService({
+            text: `${m}분 ${s}초 남음`,
+          }).catch(() => {});
         }
       }, 500);
     } else {
@@ -449,7 +572,7 @@ export default function App() {
     return () => {
       clearInterval(interval);
       if (Capacitor.isNativePlatform()) {
-         SystemHelper.stopForegroundService().catch(() => {});
+        SystemHelper.stopForegroundService().catch(() => {});
       }
     };
   }, [isActive]);
@@ -458,7 +581,7 @@ export default function App() {
     if (isActive && timeLeft <= 0) {
       setIsActive(false);
       playSystemAlert(timerAlertMode);
-      
+
       if (timerMode === "focus") {
         addStudySession(initialTimeLeft, timerBookId, timerChapterId);
         setTimerEndNotification("focus_ended");
@@ -600,7 +723,7 @@ export default function App() {
       if (triggerAlarm) {
         window.sessionStorage.setItem(uniqueTriggerKey, "true");
         // Play notification alert
-        const mode = triggerAlarm.alertMode || 'sound';
+        const mode = triggerAlarm.alertMode || "sound";
         playSystemAlert(mode);
 
         setActiveAlarmNotification(triggerAlarm);
@@ -620,15 +743,18 @@ export default function App() {
     if (data.weeklyPlans) setWeeklyPlans(data.weeklyPlans);
     if (data.monthlyPlans) setMonthlyPlans(data.monthlyPlans);
     if (data.dailyGoalMinutes) setDailyGoalMinutes(data.dailyGoalMinutes);
-    if (data.autoGoalDisplayMode) setAutoGoalDisplayMode(data.autoGoalDisplayMode);
+    if (data.autoGoalDisplayMode)
+      setAutoGoalDisplayMode(data.autoGoalDisplayMode);
     if (data.dDay !== undefined) setDDay(data.dDay);
     if (data.globalFontSize) setGlobalFontSize(data.globalFontSize);
-    if (data.preventWordWrap !== undefined) setPreventWordWrap(data.preventWordWrap);
-    if (data.showNavLabelsMobile !== undefined) setShowNavLabelsMobile(data.showNavLabelsMobile);
+    if (data.preventWordWrap !== undefined)
+      setPreventWordWrap(data.preventWordWrap);
+    if (data.showNavLabelsMobile !== undefined)
+      setShowNavLabelsMobile(data.showNavLabelsMobile);
     if (data.dDaySize) setDDaySize(data.dDaySize);
     if (data.language) setLanguage(data.language);
     if (data.hideHeroText !== undefined) setHideHeroText(data.hideHeroText);
-    
+
     setLocalDataTimestamp(newTimestamp);
   };
 
@@ -654,15 +780,20 @@ export default function App() {
         setAutoBackupStatus("자동 백업 실행 중...");
         const newTimestamp = Date.now();
         setLocalDataTimestamp(newTimestamp);
-        const status = await autoSyncDrive(cloudSyncPayload, newTimestamp, onDataSync, syncNetworkPreference);
+        const status = await autoSyncDrive(
+          cloudSyncPayload,
+          newTimestamp,
+          onDataSync,
+          syncNetworkPreference
+        );
         if (status === "skipped_wifi") {
-           setAutoBackupStatus("생략됨 (Wi-Fi 밖)");
+          setAutoBackupStatus("생략됨 (Wi-Fi 밖)");
         } else if (status === "skipped_offline") {
-           setAutoBackupStatus("연결 대기 중");
+          setAutoBackupStatus("연결 대기 중");
         } else {
-           const backupTime = new Date().toISOString();
-           setLastAutoBackupAt(backupTime);
-           setAutoBackupStatus("자동 백업 완료");
+          const backupTime = new Date().toISOString();
+          setLastAutoBackupAt(backupTime);
+          setAutoBackupStatus("자동 백업 완료");
         }
       } catch (error: any) {
         setAutoBackupStatus(`자동 백업 실패: ${error.message}`);
@@ -679,9 +810,11 @@ export default function App() {
 
   useEffect(() => {
     if (!isAllLoaded) return;
-    const interval = Math.floor(Math.random() * 1000) + window.setInterval(() => {
-       createDriveSnapshot(cloudSyncPayload);
-    }, 5 * 60 * 1000);
+    const interval =
+      Math.floor(Math.random() * 1000) +
+      window.setInterval(() => {
+        createDriveSnapshot(cloudSyncPayload);
+      }, 5 * 60 * 1000);
     return () => window.clearInterval(interval);
   }, [cloudSyncPayload, isAllLoaded]);
 
@@ -732,14 +865,14 @@ export default function App() {
   };
 
   const navItems = [
-    { id: "home", label: t('nav.home', "홈"), icon: HomeIcon },
-    { id: "plan", label: t('nav.plan', "오늘 계획"), icon: Target },
-    { id: "books", label: t('nav.books', "진도 관리"), icon: BookIcon },
-    { id: "timer", label: t('nav.timer', "타이머"), icon: Timer },
-    { id: "calendar", label: t('nav.calendar', "달력"), icon: CalendarIcon },
-    { id: "stats", label: t('nav.stats', "통계"), icon: LineChart },
-    { id: "alarms", label: t('nav.alarms', "알림 설정"), icon: Bell },
-    { id: "settings", label: t('nav.settings', "설정"), icon: SettingsIcon },
+    { id: "home", label: t("nav.home", "홈"), icon: HomeIcon },
+    { id: "plan", label: t("nav.plan", "오늘 계획"), icon: Target },
+    { id: "books", label: t("nav.books", "진도 관리"), icon: BookIcon },
+    { id: "timer", label: t("nav.timer", "타이머"), icon: Timer },
+    { id: "calendar", label: t("nav.calendar", "달력"), icon: CalendarIcon },
+    { id: "stats", label: t("nav.stats", "통계"), icon: LineChart },
+    { id: "alarms", label: t("nav.alarms", "알림 설정"), icon: Bell },
+    { id: "settings", label: t("nav.settings", "설정"), icon: SettingsIcon },
   ] as const;
 
   if (!isAllLoaded) {
@@ -748,7 +881,7 @@ export default function App() {
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="w-12 h-12 text-indigo-500 animate-spin" />
           <p className="text-slate-500 dark:text-slate-400 font-bold">
-            {t('loader.loadingData')}
+            {t("loader.loadingData")}
           </p>
         </div>
       </div>
@@ -760,29 +893,31 @@ export default function App() {
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center p-6">
         <div className="w-full max-w-sm bg-white dark:bg-slate-800 rounded-3xl p-8 shadow-2xl flex flex-col gap-6">
           <div className="text-center">
-            <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-2">{t('languageSelection.title')}</h2>
+            <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-2">
+              {t("languageSelection.title")}
+            </h2>
             <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
-              {t('languageSelection.subtitle')}
+              {t("languageSelection.subtitle")}
             </p>
           </div>
           <div className="flex flex-col gap-3">
             <button
-              onClick={() => setLanguage('ko')}
+              onClick={() => setLanguage("ko")}
               className="w-full py-4 bg-slate-100 hover:bg-indigo-50 dark:bg-slate-700 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-2xl font-bold transition-all flex justify-center items-center gap-2"
             >
-              {t('languageSelection.ko')}
+              {t("languageSelection.ko")}
             </button>
             <button
-              onClick={() => setLanguage('en')}
+              onClick={() => setLanguage("en")}
               className="w-full py-4 bg-slate-100 hover:bg-indigo-50 dark:bg-slate-700 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-2xl font-bold transition-all flex justify-center items-center gap-2"
             >
-              {t('languageSelection.en')}
+              {t("languageSelection.en")}
             </button>
             <button
-              onClick={() => setLanguage('ja')}
+              onClick={() => setLanguage("ja")}
               className="w-full py-4 bg-slate-100 hover:bg-indigo-50 dark:bg-slate-700 dark:hover:bg-indigo-900/30 text-slate-700 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-2xl font-bold transition-all flex justify-center items-center gap-2"
             >
-              {t('languageSelection.ja')}
+              {t("languageSelection.ja")}
             </button>
           </div>
         </div>
@@ -792,413 +927,477 @@ export default function App() {
 
   return (
     <>
-    {!hasSeenPermissionWizard && Capacitor.isNativePlatform() && (
-      <PermissionWizard onComplete={() => setHasSeenPermissionWizard(true)} />
-    )}
-    <div
-      className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-slate-100 transition-colors"
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-    >
-      <header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-700/50 flex items-center justify-between sticky top-0 z-40 transition-colors">
-        <div className="max-w-5xl mx-auto px-4 sm:px-8 h-20 w-full flex items-center justify-between gap-4 sm:gap-6">
-          <div
-            className="flex items-center gap-3 cursor-pointer shrink-0"
-            onClick={() => setActiveTab("home")}
-          >
-            <img
-              src="/icon.png"
-              alt="Bright Study Icon"
-              className="w-11 h-11 object-cover rounded-xl shadow-sm border-2 border-white dark:border-white bg-white"
-            />
-            <h1 className="hidden sm:block text-xl font-black text-slate-800 dark:text-white tracking-tight font-sans whitespace-nowrap">
-              Bright Study
-            </h1>
-          </div>
-          <nav
-            ref={navRef}
-            className="flex gap-1 bg-slate-100/50 dark:bg-slate-900/50 p-1.5 rounded-full border border-slate-200/50 dark:border-slate-700/50 max-w-full overflow-x-auto touch-pan-x scrollbar-hide no-swipe"
-          >
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id as any)}
-                  data-active={isActive ? "true" : undefined}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2 rounded-full text-xs sm:text-sm font-bold transition-all relative whitespace-nowrap shrink-0",
-                    isActive
-                      ? "text-indigo-600 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-                  )}
-                >
-                  {isActive && (
-                    <motion.div
-                      layoutId="nav-pill"
-                      className="absolute inset-0 bg-white dark:bg-slate-800 rounded-full shadow-sm border border-slate-200/50 dark:border-slate-700/50"
-                      transition={{
-                        type: "spring",
-                        stiffness: 400,
-                        damping: 30,
-                      }}
-                    />
-                  )}
-                  <span className="relative z-10 flex items-center gap-2">
-                    <Icon className="w-4 h-4" />
-                    <span
-                      className={cn(
-                        "uppercase text-[10px] tracking-wider mt-0.5",
-                        showNavLabelsMobile ? "inline" : "hidden md:inline"
-                      )}
-                    >
-                      {item.label}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-      </header>
-
-      {/* Timer End Modal */}
-      {timerEndNotification && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 max-w-sm w-full shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
-            <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center text-4xl mb-6 shadow-inner">
-              {timerEndNotification === "focus_ended" ? "🎉" : "💪"}
-            </div>
-            <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-3">
-              {timerEndNotification === "focus_ended" ? t('timerEndModal.focusEndedTitle') : t('timerEndModal.breakEndedTitle')}
-            </h3>
-            <p className="text-slate-600 dark:text-slate-300 mb-8 font-medium">
-              {timerEndNotification === "focus_ended" 
-                ? t('timerEndModal.focusEndedBody') 
-                : t('timerEndModal.breakEndedBody')}
-            </p>
-            <button
-              onClick={() => {
-                const nextMode = timerEndNotification === "focus_ended" ? "break" : "focus";
-                setTimerMode(nextMode);
-                setTimeLeft(
-                  nextMode === "break"
-                    ? 5 * 60
-                    : (timerType === "beginner" ? 25 * 60 : expertTime.hours * 3600 + expertTime.minutes * 60 + expertTime.seconds)
-                );
-                setTimerEndNotification(null);
-                setIsActive(true); // Automatically start next phase upon clicking OK
-              }}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl transition-colors shadow-lg shadow-indigo-200 dark:shadow-none text-lg"
-            >
-              {t('timerEndModal.confirm')}
-            </button>
-          </div>
-        </div>
+      {!hasSeenPermissionWizard && Capacitor.isNativePlatform() && (
+        <PermissionWizard onComplete={() => setHasSeenPermissionWizard(true)} />
       )}
-
-      {/* Alarm Trigger Modal */}
-      {activeAlarmNotification && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 max-w-sm w-full shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
-            <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center text-4xl mb-6 shadow-inner animate-bounce">
-              ⏰
-            </div>
-            <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-3">
-              {t('alarmNotification.title')}
-            </h3>
-            <p className="text-slate-600 dark:text-slate-300 mb-8 font-medium">
-              {(() => {
-                 if (activeAlarmNotification.expertMode && activeAlarmNotification.bookId) {
-                   const book = activeBooks.find(b => b.id === activeAlarmNotification.bookId);
-                   const chapter = book?.chapters.find(c => c.id === activeAlarmNotification.chapterId);
-                   if (book) {
-                     return chapter ? `${book.title} ${chapter.title} 공부할 시간이에요!` : `${book.title} 공부할 시간이에요!`;
-                   }
-                 }
-                 return t('alarmNotification.defaultBody');
-              })()}
-            </p>
-            <button
-              onClick={() => setActiveAlarmNotification(null)}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl transition-colors shadow-lg shadow-indigo-200 dark:shadow-none text-lg"
+      <div
+        className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-slate-100 transition-colors"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        <header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-700/50 flex items-center justify-between sticky top-0 z-40 transition-colors">
+          <div className="max-w-5xl mx-auto px-4 sm:px-8 h-20 w-full flex items-center justify-between gap-4 sm:gap-6">
+            <div
+              className="flex items-center gap-3 cursor-pointer shrink-0"
+              onClick={() => setActiveTab("home")}
             >
-              {t('alarmNotification.confirm')}
-            </button>
-          </div>
-        </div>
-      )}
-
-      <main className="max-w-5xl mx-auto px-4 py-8 sm:py-12">
-        {(!hideHeroText || activeTab === "home") && (
-          <div className="mb-10 flex flex-col sm:flex-row justify-between items-center sm:items-start gap-6">
-            {!hideHeroText && (
-              <div className="text-center sm:text-left">
-                <h2 className="text-3xl sm:text-4xl font-black text-slate-800 dark:text-white mb-3 tracking-tight">
-                  {activeTab === "home" && t('hero.home')}
-                  {activeTab === "plan" && t('hero.plan')}
-                  {activeTab === "books" && t('hero.books')}
-                  {activeTab === "timer" && t('hero.timer')}
-                  {activeTab === "calendar" && t('hero.calendar')}
-                  {activeTab === "stats" && t('hero.stats')}
-                  {activeTab === "alarms" && t('hero.alarms')}
-                  {activeTab === "settings" && t('hero.settings')}
-                </h2>
-              </div>
-            )}
-
-            {/* D-Day Header Component */}
-            {activeTab === "home" && (
-            <div className="bg-white dark:bg-slate-800 p-4 sm:p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col justify-center relative overflow-visible group min-w-[240px]">
-              <div className="absolute top-3 right-3" ref={dDayMenuRef}>
-                <button
-                  onClick={() => setShowDDayMenu((p) => !p)}
-                  className="p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                >
-                  <MoreVertical className="w-4 h-4" />
-                </button>
-                {showDDayMenu && (
-                  <div className="absolute right-0 top-6 w-36 bg-white dark:bg-slate-700 shadow-xl rounded-xl overflow-hidden py-1 z-20 border border-slate-100 dark:border-slate-600">
-                    <button
-                      onClick={() => {
-                        setIsEditingDDay(true);
-                        setDDayTitleInput(dDay?.title || "");
-                        setDDayDateInput(dDay?.date || "");
-                        setShowDDayMenu(false);
-                      }}
-                      className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600 flex items-center gap-2"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" /> 수정
-                    </button>
-                    <button
-                      onClick={() => {
-                        setDDay(null);
-                        setShowDDayMenu(false);
-                      }}
-                      className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2 mb-1"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" /> 삭제
-                    </button>
-                    <div className="flex items-center justify-between px-3 py-2 border-t border-slate-100 dark:border-slate-600">
-                      <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
-                        크기
+              <img
+                src="/icon.png"
+                alt="Bright Study Icon"
+                className="w-11 h-11 object-cover rounded-xl shadow-sm border-2 border-white dark:border-white bg-white"
+              />
+              <h1 className="hidden sm:block text-xl font-black text-slate-800 dark:text-white tracking-tight font-sans whitespace-nowrap">
+                Bright Study
+              </h1>
+            </div>
+            <nav
+              ref={navRef}
+              className="flex gap-1 bg-slate-100/50 dark:bg-slate-900/50 p-1.5 rounded-full border border-slate-200/50 dark:border-slate-700/50 max-w-full overflow-x-auto touch-pan-x scrollbar-hide no-swipe"
+            >
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id as any)}
+                    data-active={isActive ? "true" : undefined}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2 rounded-full text-xs sm:text-sm font-bold transition-all relative whitespace-nowrap shrink-0",
+                      isActive
+                        ? "text-indigo-600 dark:text-indigo-400"
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                    )}
+                  >
+                    {isActive && (
+                      <motion.div
+                        layoutId="nav-pill"
+                        className="absolute inset-0 bg-white dark:bg-slate-800 rounded-full shadow-sm border border-slate-200/50 dark:border-slate-700/50"
+                        transition={{
+                          type: "spring",
+                          stiffness: 400,
+                          damping: 30,
+                        }}
+                      />
+                    )}
+                    <span className="relative z-10 flex items-center gap-2">
+                      <Icon className="w-4 h-4" />
+                      <span
+                        className={cn(
+                          "uppercase text-[10px] tracking-wider mt-0.5",
+                          showNavLabelsMobile ? "inline" : "hidden md:inline"
+                        )}
+                      >
+                        {item.label}
                       </span>
-                      <div className="flex gap-1">
+                    </span>
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        </header>
+
+        {/* Timer End Modal */}
+        {timerEndNotification && (
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 max-w-sm w-full shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
+              <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center text-4xl mb-6 shadow-inner">
+                {timerEndNotification === "focus_ended" ? "🎉" : "💪"}
+              </div>
+              <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-3">
+                {timerEndNotification === "focus_ended"
+                  ? t("timerEndModal.focusEndedTitle")
+                  : t("timerEndModal.breakEndedTitle")}
+              </h3>
+              <p className="text-slate-600 dark:text-slate-300 mb-8 font-medium">
+                {timerEndNotification === "focus_ended"
+                  ? t("timerEndModal.focusEndedBody")
+                  : t("timerEndModal.breakEndedBody")}
+              </p>
+              <button
+                onClick={() => {
+                  const nextMode =
+                    timerEndNotification === "focus_ended" ? "break" : "focus";
+                  setTimerMode(nextMode);
+                  setTimeLeft(
+                    nextMode === "break"
+                      ? 5 * 60
+                      : timerType === "beginner"
+                      ? 25 * 60
+                      : expertTime.hours * 3600 +
+                        expertTime.minutes * 60 +
+                        expertTime.seconds
+                  );
+                  setTimerEndNotification(null);
+                  setIsActive(true); // Automatically start next phase upon clicking OK
+                }}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl transition-colors shadow-lg shadow-indigo-200 dark:shadow-none text-lg"
+              >
+                {t("timerEndModal.confirm")}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Alarm Trigger Modal */}
+        {activeAlarmNotification && (
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 max-w-sm w-full shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
+              <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center text-4xl mb-6 shadow-inner animate-bounce">
+                ⏰
+              </div>
+              <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-3">
+                {t("alarmNotification.title")}
+              </h3>
+              <p className="text-slate-600 dark:text-slate-300 mb-8 font-medium">
+                {(() => {
+                  if (
+                    activeAlarmNotification.expertMode &&
+                    activeAlarmNotification.bookId
+                  ) {
+                    const book = activeBooks.find(
+                      (b) => b.id === activeAlarmNotification.bookId
+                    );
+                    const chapter = book?.chapters.find(
+                      (c) => c.id === activeAlarmNotification.chapterId
+                    );
+                    if (book) {
+                      return chapter
+                        ? `${book.title} ${chapter.title} 공부할 시간이에요!`
+                        : `${book.title} 공부할 시간이에요!`;
+                    }
+                  }
+                  return t("alarmNotification.defaultBody");
+                })()}
+              </p>
+              <button
+                onClick={() => setActiveAlarmNotification(null)}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl transition-colors shadow-lg shadow-indigo-200 dark:shadow-none text-lg"
+              >
+                {t("alarmNotification.confirm")}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <main className="max-w-5xl mx-auto px-4 py-8 sm:py-12">
+          {(!hideHeroText || activeTab === "home") && (
+            <div className="mb-10 flex flex-col sm:flex-row justify-between items-center sm:items-start gap-6">
+              {!hideHeroText && (
+                <div className="text-center sm:text-left">
+                  <h2 className="text-3xl sm:text-4xl font-black text-slate-800 dark:text-white mb-3 tracking-tight">
+                    {activeTab === "home" && t("hero.home")}
+                    {activeTab === "plan" && t("hero.plan")}
+                    {activeTab === "books" && t("hero.books")}
+                    {activeTab === "timer" && t("hero.timer")}
+                    {activeTab === "calendar" && t("hero.calendar")}
+                    {activeTab === "stats" && t("hero.stats")}
+                    {activeTab === "alarms" && t("hero.alarms")}
+                    {activeTab === "settings" && t("hero.settings")}
+                  </h2>
+                </div>
+              )}
+
+              {/* D-Day Header Component */}
+              {activeTab === "home" && (
+                <div className="bg-white dark:bg-slate-800 p-4 sm:p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col justify-center relative overflow-visible group min-w-[240px]">
+                  <div className="absolute top-3 right-3" ref={dDayMenuRef}>
+                    <button
+                      onClick={() => setShowDDayMenu((p) => !p)}
+                      className="p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                    {showDDayMenu && (
+                      <div className="absolute right-0 top-6 w-36 bg-white dark:bg-slate-700 shadow-xl rounded-xl overflow-hidden py-1 z-20 border border-slate-100 dark:border-slate-600">
                         <button
-                          onClick={() =>
-                            setDDaySize((s) => Math.max(16, s - 2))
-                          }
-                          className="w-6 h-6 flex items-center justify-center bg-slate-100 dark:bg-slate-600 rounded text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-500 font-bold"
+                          onClick={() => {
+                            setIsEditingDDay(true);
+                            setDDayTitleInput(dDay?.title || "");
+                            setDDayDateInput(dDay?.date || "");
+                            setShowDDayMenu(false);
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600 flex items-center gap-2"
                         >
-                          -
+                          <Edit2 className="w-3.5 h-3.5" /> 수정
                         </button>
                         <button
-                          onClick={() =>
-                            setDDaySize((s) => Math.min(80, s + 2))
-                          }
-                          className="w-6 h-6 flex items-center justify-center bg-slate-100 dark:bg-slate-600 rounded text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-500 font-bold"
+                          onClick={() => {
+                            setDDay(null);
+                            setShowDDayMenu(false);
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2 mb-1"
                         >
-                          +
+                          <Trash2 className="w-3.5 h-3.5" /> 삭제
+                        </button>
+                        <div className="flex items-center justify-between px-3 py-2 border-t border-slate-100 dark:border-slate-600">
+                          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                            크기
+                          </span>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() =>
+                                setDDaySize((s) => Math.max(16, s - 2))
+                              }
+                              className="w-6 h-6 flex items-center justify-center bg-slate-100 dark:bg-slate-600 rounded text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-500 font-bold"
+                            >
+                              -
+                            </button>
+                            <button
+                              onClick={() =>
+                                setDDaySize((s) => Math.min(80, s + 2))
+                              }
+                              className="w-6 h-6 flex items-center justify-center bg-slate-100 dark:bg-slate-600 rounded text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-500 font-bold"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {isEditingDDay ? (
+                    <div className="space-y-3 pt-1">
+                      <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                        {t("dDay.title")}
+                      </h3>
+                      <input
+                        type="text"
+                        placeholder={t("dDay.namePlaceholder")}
+                        value={dDayTitleInput}
+                        onChange={(e) => setDDayTitleInput(e.target.value)}
+                        className="w-full text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                      />
+                      <input
+                        type="date"
+                        value={dDayDateInput}
+                        onChange={(e) => setDDayDateInput(e.target.value)}
+                        className="w-full text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleSaveDDay}
+                          className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold py-1.5 rounded transition-colors"
+                        >
+                          {t("common.save")}
+                        </button>
+                        <button
+                          onClick={() => setIsEditingDDay(false)}
+                          className="flex-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 text-xs font-bold py-1.5 rounded transition-colors"
+                        >
+                          {t("common.cancel")}
                         </button>
                       </div>
                     </div>
-                  </div>
-                )}
-              </div>
-
-              {isEditingDDay ? (
-                <div className="space-y-3 pt-1">
-                  <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                    {t('dDay.title')}
-                  </h3>
-                  <input
-                    type="text"
-                    placeholder={t('dDay.namePlaceholder')}
-                    value={dDayTitleInput}
-                    onChange={(e) => setDDayTitleInput(e.target.value)}
-                    className="w-full text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white"
-                  />
-                  <input
-                    type="date"
-                    value={dDayDateInput}
-                    onChange={(e) => setDDayDateInput(e.target.value)}
-                    className="w-full text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleSaveDDay}
-                      className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold py-1.5 rounded transition-colors"
+                  ) : !dDay ? (
+                    <div
+                      className="flex flex-col items-center justify-center text-center space-y-2 opacity-60 hover:opacity-100 transition-opacity cursor-pointer py-2"
+                      onClick={() => setIsEditingDDay(true)}
                     >
-                      {t('common.save')}
-                    </button>
-                    <button
-                      onClick={() => setIsEditingDDay(false)}
-                      className="flex-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 text-xs font-bold py-1.5 rounded transition-colors"
-                    >
-                      {t('common.cancel')}
-                    </button>
-                  </div>
-                </div>
-              ) : !dDay ? (
-                <div
-                  className="flex flex-col items-center justify-center text-center space-y-2 opacity-60 hover:opacity-100 transition-opacity cursor-pointer py-2"
-                  onClick={() => setIsEditingDDay(true)}
-                >
-                  <div className="w-8 h-8 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center text-slate-400">
-                    <Plus className="w-4 h-4" />
-                  </div>
-                  <p className="text-xs text-slate-500 font-bold">
-                    {t('dDay.add')}
-                  </p>
-                </div>
-              ) : (
-                <div className="flex flex-col justify-center">
-                  <div className="flex items-center gap-2 mb-1">
-                    <CalendarDays className="w-3.5 h-3.5 text-indigo-500" />
-                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 truncate pr-6">
-                      {dDay.title}
-                    </span>
-                  </div>
-                  <div
-                    className="flex items-baseline gap-1"
-                    style={{ fontSize: `${dDaySize}px` }}
-                  >
-                    <span className="font-black tracking-tighter text-slate-800 dark:text-white mr-1">
-                      D
-                    </span>
-                    <span className="font-black tracking-tighter text-slate-800 dark:text-white">
-                      {(() => {
-                        const diff = differenceInDays(
-                          parseISO(dDay.date),
-                          new Date(new Date().setHours(0, 0, 0, 0))
-                        );
-                        if (diff === 0) return "-DAY";
-                        if (diff > 0) return `-${diff}`;
-                        return `+${Math.abs(diff)}`;
-                      })()}
-                    </span>
-                  </div>
-                  <div className="text-[10px] font-bold text-slate-400 mt-1">
-                    {dDay.date.replace(/-/g, ".")}
-                  </div>
+                      <div className="w-8 h-8 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center text-slate-400">
+                        <Plus className="w-4 h-4" />
+                      </div>
+                      <p className="text-xs text-slate-500 font-bold">
+                        {t("dDay.add")}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col justify-center">
+                      <div className="flex items-center gap-2 mb-1">
+                        <CalendarDays className="w-3.5 h-3.5 text-indigo-500" />
+                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 truncate pr-6">
+                          {dDay.title}
+                        </span>
+                      </div>
+                      <div
+                        className="flex items-baseline gap-1"
+                        style={{ fontSize: `${dDaySize}px` }}
+                      >
+                        <span className="font-black tracking-tighter text-slate-800 dark:text-white mr-1">
+                          D
+                        </span>
+                        <span className="font-black tracking-tighter text-slate-800 dark:text-white">
+                          {(() => {
+                            const diff = differenceInDays(
+                              parseISO(dDay.date),
+                              new Date(new Date().setHours(0, 0, 0, 0))
+                            );
+                            if (diff === 0) return "-DAY";
+                            if (diff > 0) return `-${diff}`;
+                            return `+${Math.abs(diff)}`;
+                          })()}
+                        </span>
+                      </div>
+                      <div className="text-[10px] font-bold text-slate-400 mt-1">
+                        {dDay.date.replace(/-/g, ".")}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           )}
-        </div>
-        )}
 
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-          >
-            {activeTab === "home" && (
-              <Home
-                books={activeBooks}
-                setBooks={setBooks}
-                sessions={sessions}
-                alarms={alarms}
-                setAlarms={setAlarms}
-                setActiveTab={setActiveTab}
-                addStudySession={addStudySession}
-                realTimeAddedSeconds={realTimeAddedSeconds}
-                dailyGoalMinutes={dailyGoalMinutes}
-                autoGoalDisplayMode={autoGoalDisplayMode}
-              />
-            )}
-            {activeTab === "plan" && (
-              <TodayPlan
-                dailyGoalMinutes={dailyGoalMinutes}
-                setDailyGoalMinutes={setDailyGoalMinutes}
-                weeklyPlans={weeklyPlans}
-                setWeeklyPlans={setWeeklyPlans}
-                books={activeBooks}
-                setActiveTab={setActiveTab}
-                autoGoalDisplayMode={autoGoalDisplayMode}
-              />
-            )}
-            {activeTab === "books" && (
-              <BookManager books={books} setBooks={setBooks} />
-            )}
-            {activeTab === "timer" && (
-              <PomodoroTimer
-                onSessionComplete={addStudySession}
-                sessions={sessions}
-                timerProps={timerProps}
-                books={activeBooks}
-                updateSession={updateSession}
-                deleteSession={deleteSession}
-                dailyGoalMinutes={dailyGoalMinutes}
-              />
-            )}
-            {activeTab === "calendar" && (
-              <Calendar
-                sessions={sessions}
-                weeklyPlans={weeklyPlans}
-                setWeeklyPlans={setWeeklyPlans}
-                monthlyPlans={monthlyPlans}
-                setMonthlyPlans={setMonthlyPlans}
-                books={activeBooks}
-              />
-            )}
-            {activeTab === "stats" && (
-              <Statistics
-                sessions={sessions}
-                realTimeAddedSeconds={realTimeAddedSeconds}
-                weeklyPlans={weeklyPlans}
-                setWeeklyPlans={setWeeklyPlans}
-                dailyGoalMinutes={dailyGoalMinutes}
-                setDailyGoalMinutes={setDailyGoalMinutes}
-                books={activeBooks}
-                setActiveTab={setActiveTab}
-                autoGoalDisplayMode={autoGoalDisplayMode}
-              />
-            )}
-            {activeTab === "alarms" && (
-              <Alarms
-                alarms={alarms}
-                setAlarms={setAlarms}
-                books={activeBooks}
-              />
-            )}
-            {activeTab === "settings" && (
-              <Settings
-                isDarkMode={isDarkMode}
-                setIsDarkMode={setIsDarkMode}
-                onDataSync={onDataSync}
-                getAllData={getAllData}
-                autoGoalDisplayMode={autoGoalDisplayMode}
-                setAutoGoalDisplayMode={setAutoGoalDisplayMode}
-                globalFontSize={globalFontSize}
-                setGlobalFontSize={setGlobalFontSize}
-                preventWordWrap={preventWordWrap}
-                setPreventWordWrap={setPreventWordWrap}
-                showNavLabelsMobile={showNavLabelsMobile}
-                setShowNavLabelsMobile={setShowNavLabelsMobile}
-                hideHeroText={hideHeroText}
-                setHideHeroText={setHideHeroText}
-                autoBackupStatus={autoBackupStatus}
-                lastAutoBackupAt={lastAutoBackupAt}
-                localDataTimestamp={localDataTimestamp}
-                syncNetworkPreference={syncNetworkPreference}
-                setSyncNetworkPreference={setSyncNetworkPreference}
-                language={language}
-                setLanguage={setLanguage}
-              />
-            )}
-          </motion.div>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+            >
+              {activeTab === "home" && (
+                <Home
+                  books={activeBooks}
+                  setBooks={setBooks}
+                  sessions={sessions}
+                  alarms={alarms}
+                  setAlarms={setAlarms}
+                  setActiveTab={setActiveTab}
+                  addStudySession={addStudySession}
+                  realTimeAddedSeconds={realTimeAddedSeconds}
+                  dailyGoalMinutes={dailyGoalMinutes}
+                  autoGoalDisplayMode={autoGoalDisplayMode}
+                />
+              )}
+              {activeTab === "plan" && (
+                <TodayPlan
+                  dailyGoalMinutes={dailyGoalMinutes}
+                  setDailyGoalMinutes={setDailyGoalMinutes}
+                  weeklyPlans={weeklyPlans}
+                  setWeeklyPlans={setWeeklyPlans}
+                  books={activeBooks}
+                  setActiveTab={setActiveTab}
+                  autoGoalDisplayMode={autoGoalDisplayMode}
+                />
+              )}
+              {activeTab === "books" && (
+                <BookManager books={books} setBooks={setBooks} />
+              )}
+              {activeTab === "timer" && (
+                <PomodoroTimer
+                  onSessionComplete={addStudySession}
+                  sessions={sessions}
+                  timerProps={timerProps}
+                  books={activeBooks}
+                  updateSession={updateSession}
+                  deleteSession={deleteSession}
+                  dailyGoalMinutes={dailyGoalMinutes}
+                />
+              )}
+              {activeTab === "calendar" && (
+                <Calendar
+                  sessions={sessions}
+                  weeklyPlans={weeklyPlans}
+                  setWeeklyPlans={setWeeklyPlans}
+                  monthlyPlans={monthlyPlans}
+                  setMonthlyPlans={setMonthlyPlans}
+                  books={activeBooks}
+                />
+              )}
+              {activeTab === "stats" && (
+                <Statistics
+                  sessions={sessions}
+                  realTimeAddedSeconds={realTimeAddedSeconds}
+                  weeklyPlans={weeklyPlans}
+                  setWeeklyPlans={setWeeklyPlans}
+                  dailyGoalMinutes={dailyGoalMinutes}
+                  setDailyGoalMinutes={setDailyGoalMinutes}
+                  books={activeBooks}
+                  setActiveTab={setActiveTab}
+                  autoGoalDisplayMode={autoGoalDisplayMode}
+                />
+              )}
+              {activeTab === "alarms" && (
+                <Alarms
+                  alarms={alarms}
+                  setAlarms={setAlarms}
+                  books={activeBooks}
+                />
+              )}
+              {activeTab === "settings" && (
+                <Settings
+                  isDarkMode={isDarkMode}
+                  setIsDarkMode={setIsDarkMode}
+                  onDataSync={onDataSync}
+                  getAllData={getAllData}
+                  autoGoalDisplayMode={autoGoalDisplayMode}
+                  setAutoGoalDisplayMode={setAutoGoalDisplayMode}
+                  globalFontSize={globalFontSize}
+                  setGlobalFontSize={setGlobalFontSize}
+                  preventWordWrap={preventWordWrap}
+                  setPreventWordWrap={setPreventWordWrap}
+                  showNavLabelsMobile={showNavLabelsMobile}
+                  setShowNavLabelsMobile={setShowNavLabelsMobile}
+                  hideHeroText={hideHeroText}
+                  setHideHeroText={setHideHeroText}
+                  autoBackupStatus={autoBackupStatus}
+                  lastAutoBackupAt={lastAutoBackupAt}
+                  localDataTimestamp={localDataTimestamp}
+                  syncNetworkPreference={syncNetworkPreference}
+                  setSyncNetworkPreference={setSyncNetworkPreference}
+                  language={language}
+                  setLanguage={setLanguage}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
+
+          <div className="mt-12 text-center text-slate-400 dark:text-slate-500 font-medium text-xs sm:text-sm">
+            학습 기록은 기기에 안전하게 자동 저장됩니다. 편하게 이용해보세요.
+          </div>
+        </main>
+
+        <AnimatePresence>
+          {showAppExitModal && (
+            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[9999] flex flex-col items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className="w-full max-w-sm bg-white dark:bg-slate-800 rounded-3xl p-8 shadow-2xl flex flex-col gap-6"
+              >
+                <div>
+                  <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 mb-2">
+                    앱을 종료하시겠습니까?
+                  </h3>
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                    앱을 종료하면 타이머 등 켜져 있는 기능이 모두 중단됩니다.
+                  </p>
+                </div>
+
+                <div className="flex gap-3 mt-2">
+                  <button
+                    onClick={() => {
+                      if (Capacitor.isNativePlatform()) {
+                        CapApp.exitApp();
+                      } else if ((window as any).__TAURI__) {
+                        window.close();
+                      } else {
+                        setShowAppExitModal(false);
+                        try {
+                          window.close();
+                        } catch (e) {}
+                      }
+                    }}
+                    className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-colors text-sm"
+                  >
+                    종료
+                  </button>
+                  <button
+                    onClick={() => setShowAppExitModal(false)}
+                    className="flex-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold py-3 rounded-xl transition-colors text-sm"
+                  >
+                    취소
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
         </AnimatePresence>
-
-        <div className="mt-12 text-center text-slate-400 dark:text-slate-500 font-medium text-xs sm:text-sm">
-          학습 기록은 기기에 안전하게 자동 저장됩니다. 편하게 이용해보세요.
-        </div>
-      </main>
-    </div>
+      </div>
     </>
   );
 }

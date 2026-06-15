@@ -1,7 +1,8 @@
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Plus, Book as BookIcon } from 'lucide-react';
 import { Book } from '../types';
+import { registerBackHandler } from '../lib/backHandler';
 
 interface AddBookModalProps {
   isOpen: boolean;
@@ -23,6 +24,15 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
   const [newBookTitle, setNewBookTitle] = useState('');
   const [newBookAuthor, setNewBookAuthor] = useState('');
   const [selectedTheme, setSelectedTheme] = useState(themeColors[0]);
+
+  useEffect(() => {
+    if (isOpen) {
+      return registerBackHandler(() => {
+        onClose();
+        return true;
+      });
+    }
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 

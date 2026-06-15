@@ -5,6 +5,7 @@ import { Target, Book as BookIcon, Clock, Plus, Trash2, X, CalendarDays, RotateC
 import { Book, Chapter } from '../types';
 import { useLocalStorage, cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { registerBackHandler } from '../lib/backHandler';
 
 interface TodayPlanProps {
   dailyGoalMinutes: number;
@@ -84,6 +85,21 @@ export default function TodayPlan({ dailyGoalMinutes, setDailyGoalMinutes, setWe
   const [endPage, setEndPage] = useState('');
   const [memo, setMemo] = useState('');
   const [activeGoalMenuId, setActiveGoalMenuId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (editingBlockId) {
+      return registerBackHandler(() => {
+        setEditingBlockId(null);
+        return true;
+      });
+    }
+    if (showResetConfirm) {
+      return registerBackHandler(() => {
+        setShowResetConfirm(false);
+        return true;
+      });
+    }
+  }, [editingBlockId, showResetConfirm]);
 
   // Sync to weeklyPlans for Calendar
   useEffect(() => {

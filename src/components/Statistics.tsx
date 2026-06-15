@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { StudySession } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { format, subDays, parseISO, isSameDay, startOfWeek, startOfMonth, endOfMonth, isAfter, addDays, getDay, startOfDay } from 'date-fns';
@@ -8,6 +8,7 @@ import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import TodayPlan from './TodayPlan';
 import { useTranslation } from 'react-i18next';
+import { registerBackHandler } from '../lib/backHandler';
 
 interface StatisticsProps {
   sessions: StudySession[];
@@ -28,6 +29,27 @@ export default function Statistics({ sessions, realTimeAddedSeconds = 0, weeklyP
   const [showMonthlyModal, setShowMonthlyModal] = useState(false);
   const [showPastPlansModal, setShowPastPlansModal] = useState(false);
   const [pastPlansDate, setPastPlansDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+
+  useEffect(() => {
+    if (showWeeklyModal) {
+      return registerBackHandler(() => {
+        setShowWeeklyModal(false);
+        return true;
+      });
+    }
+    if (showMonthlyModal) {
+      return registerBackHandler(() => {
+        setShowMonthlyModal(false);
+        return true;
+      });
+    }
+    if (showPastPlansModal) {
+      return registerBackHandler(() => {
+        setShowPastPlansModal(false);
+        return true;
+      });
+    }
+  }, [showWeeklyModal, showMonthlyModal, showPastPlansModal]);
 
   const handlePlanChange = (dateKey: string, value: string) => {
     setWeeklyPlans((prev: Record<string, string>) => ({ ...prev, [dateKey]: value }));

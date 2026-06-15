@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { X, ChevronRight, Bell, FileText, ArrowLeft } from "lucide-react";
 import { NOTICES, Notice } from "../data/notices";
 import { cn } from "../lib/utils";
+import { registerBackHandler } from "../lib/backHandler";
 
 interface NoticeModalProps {
   onClose: () => void;
@@ -10,6 +11,17 @@ interface NoticeModalProps {
 
 export default function NoticeModal({ onClose }: NoticeModalProps) {
   const [selectedNotice, setSelectedNotice] = useState<Notice | null>(null);
+
+  useEffect(() => {
+    return registerBackHandler(() => {
+      if (selectedNotice) {
+        setSelectedNotice(null);
+        return true; // We handled it
+      }
+      onClose();
+      return true; // We handled it
+    });
+  }, [selectedNotice, onClose]);
 
   const sortedNotices = [...NOTICES].sort((a, b) => {
     if (a.pinned && !b.pinned) return -1;

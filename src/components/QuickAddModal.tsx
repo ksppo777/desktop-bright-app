@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { Book, Chapter } from '../types';
+import { registerBackHandler } from '../lib/backHandler';
 
 interface QuickAddModalProps {
   isOpen: boolean;
@@ -22,8 +23,13 @@ export default function QuickAddModal({ isOpen, onClose, onAdd, book, chapter }:
       setStartPage(chapter.startPage);
       setEndPage(chapter.endPage);
       setIsFullChapter(false);
+      
+      return registerBackHandler(() => {
+        onClose();
+        return true;
+      });
     }
-  }, [isOpen, chapter]);
+  }, [isOpen, chapter, onClose]);
 
   if (!isOpen) return null;
 

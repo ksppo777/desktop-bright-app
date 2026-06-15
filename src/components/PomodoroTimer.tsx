@@ -4,6 +4,7 @@ import { Play, Pause, RefreshCw, Coffee, Brain, Settings2, Target, Square, MoreV
 import { cn } from '../lib/utils';
 import { StudySession } from '../types';
 import { isSameDay, parseISO } from 'date-fns';
+import { registerBackHandler } from '../lib/backHandler';
 
 let capacitorNotifications: any = null;
 import("../lib/capacitor-notifications").then((m) => {
@@ -50,6 +51,23 @@ export default function PomodoroTimer({ onSessionComplete, sessions, timerProps,
      chapterId: string;
      confirmMsg: string;
   } | null>(null);
+
+  useEffect(() => {
+    if (editModalOpen) {
+      return registerBackHandler(() => {
+        setEditModalOpen(false);
+        setSessionToEdit(null);
+        setConfirmDelete(false);
+        return true;
+      });
+    }
+    if (syncConfirmData) {
+      return registerBackHandler(() => {
+        setSyncConfirmData(null);
+        return true;
+      });
+    }
+  }, [editModalOpen, syncConfirmData]);
 
   const toggleTimer = async () => {
     if (!isActive && !timerBookId && mode === 'focus') {

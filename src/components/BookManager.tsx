@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Plus, Check, ChevronDown, ChevronUp, BookOpen, Trash2, X, Edit3, Copy, MoreVertical, Edit2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { registerBackHandler } from '../lib/backHandler';
 
 interface BookManagerProps {
   books: Book[];
@@ -444,6 +445,15 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
   const validBooks = books.filter(b => !b.isTrash);
   const trashedBooks = books.filter(b => b.isTrash);
   const [showTrashModal, setShowTrashModal] = useState(false);
+
+  useEffect(() => {
+    if (showTrashModal) {
+      return registerBackHandler(() => {
+        setShowTrashModal(false);
+        return true;
+      });
+    }
+  }, [showTrashModal]);
 
   return (
     <div className="space-y-6 w-full max-w-4xl mx-auto">
