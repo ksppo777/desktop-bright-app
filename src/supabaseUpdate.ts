@@ -26,6 +26,7 @@ export const checkAndApplyUpdate = async () => {
       .single();
 
     if (error || !data) {
+      console.error('⚠️ Supabase 에러 상세 원인:', JSON.stringify(error)); // <--- 이 줄을 추가!
       console.log('업데이트 정보를 찾을 수 없습니다.');
       return;
     }

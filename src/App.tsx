@@ -12,6 +12,7 @@ import Home from "./components/Home";
 import Alarms from "./components/Alarms";
 import Calendar from "./components/Calendar";
 import TodayPlan from "./components/TodayPlan";
+import PermissionWizard from "./components/PermissionWizard";
 import {
   Book as BookIcon,
   Timer,
@@ -42,6 +43,7 @@ import("./lib/capacitor-notifications").then((m) => {
 
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
+import { SystemHelper } from "./lib/systemHelper";
 
 const AUTO_CLOUD_BACKUP_DEBOUNCE_MS = 8000;
 
@@ -100,6 +102,11 @@ export default function App() {
     useLocalStorage<number>("study-helper-font-size", 16);
   const [preventWordWrap, setPreventWordWrap, isWordWrapLoaded] =
     useLocalStorage<boolean>("study-helper-word-wrap", false);
+
+  const [hasSeenPermissionWizard, setHasSeenPermissionWizard, isWizardFlagLoaded] = useLocalStorage<boolean>(
+    "study-helper-seen-wizard",
+    false
+  );
   const [showNavLabelsMobile, setShowNavLabelsMobile, isNavLabelsLoaded] =
     useLocalStorage<boolean>("study-helper-nav-labels", false);
   const [dDaySize, setDDaySize, isDDaySizeLoaded] = useLocalStorage<number>(
@@ -157,7 +164,8 @@ export default function App() {
     isSyncNetworkLoaded &&
     isLanguageLoaded &&
     isHideHeroLoaded &&
-    isNewInstallCheckDone;
+    isNewInstallCheckDone &&
+    isWizardFlagLoaded;
 
   const cloudSyncPayload = useMemo(
     () => ({
@@ -274,6 +282,9 @@ export default function App() {
   const [activeAlarmNotification, setActiveAlarmNotification] = useState<StudyAlarm | null>(null);
 
   const playSystemAlert = (mode: "sound" | "vibrate" | "both" | "off") => {
+    if (Capacitor.isNativePlatform()) {
+      SystemHelper.bringToFront().catch(() => {});
+    }
     if (mode === "sound" || mode === "both") {
       const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
       audio.play().catch(() => {});
@@ -412,21 +423,39 @@ export default function App() {
     setSessions((prev) => prev.filter((s) => s.id !== id));
   };
 
+  const lastTickRef = useRef(Date.now());
+
   useEffect(() => {
     let interval: any;
-    let lastTick = Date.now();
-    
     if (isActive && timeLeft > 0) {
+      if (Capacitor.isNativePlatform()) {
+        SystemHelper.startForegroundService({ title: "Bright Study", text: "타이머 진행..." }).catch(() => {});
+      }
+      const endTime = Date.now() + timeLeft * 1000;
       interval = setInterval(() => {
-        const now = Date.now();
-        const deltaSeconds = Math.round((now - lastTick) / 1000);
-        
-        if (deltaSeconds >= 1) {
-          setTimeLeft((prev) => Math.max(0, prev - deltaSeconds));
-          lastTick = now;
+        const nextTime = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+        setTimeLeft(nextTime);
+        if (Capacitor.isNativePlatform() && nextTime > 0) {
+          const m = Math.floor(nextTime / 60);
+          const s = nextTime % 60;
+          SystemHelper.updateForegroundService({ text: `${m}분 ${s}초 남음` }).catch(() => {});
         }
       }, 500);
-    } else if (isActive && timeLeft <= 0) {
+    } else {
+      if (Capacitor.isNativePlatform()) {
+        SystemHelper.stopForegroundService().catch(() => {});
+      }
+    }
+    return () => {
+      clearInterval(interval);
+      if (Capacitor.isNativePlatform()) {
+         SystemHelper.stopForegroundService().catch(() => {});
+      }
+    };
+  }, [isActive]);
+
+  useEffect(() => {
+    if (isActive && timeLeft <= 0) {
       setIsActive(false);
       playSystemAlert(timerAlertMode);
       
@@ -437,7 +466,6 @@ export default function App() {
         setTimerEndNotification("break_ended");
       }
     }
-    return () => clearInterval(interval);
   }, [
     isActive,
     timeLeft,
@@ -755,6 +783,10 @@ export default function App() {
   }
 
   return (
+    <>
+    {!hasSeenPermissionWizard && Capacitor.isNativePlatform() && (
+      <PermissionWizard onComplete={() => setHasSeenPermissionWizard(true)} />
+    )}
     <div
       className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-slate-100 transition-colors"
       onTouchStart={handleTouchStart}
@@ -1159,5 +1191,6 @@ export default function App() {
         </div>
       </main>
     </div>
+    </>
   );
 }

@@ -15,10 +15,13 @@ import {
   MessageCircle,
   Type,
   AlignLeft,
+  Bell,
+  ChevronRight,
 } from "lucide-react";
 import { clearStorage, setStorage } from "../lib/storage";
 import { cn } from "../lib/utils";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
+import NoticeModal from "./NoticeModal";
 
 interface SettingsProps {
   isDarkMode: boolean;
@@ -149,6 +152,7 @@ export default function Settings({
 
   const [showResetModal, setShowResetModal] = useState(false);
   const [showSupportModal, setShowSupportModal] = useState(false);
+  const [showNoticeModal, setShowNoticeModal] = useState(false);
 
   const handleFactoryReset = async () => {
     await clearStorage();
@@ -170,6 +174,26 @@ export default function Settings({
 
   return (
     <div className="flex flex-col gap-4 pb-20">
+      {/* 0. Notices */}
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <button 
+          onClick={() => setShowNoticeModal(true)}
+          className="w-full px-5 py-4 flex items-center justify-between gap-4 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-orange-500 shrink-0 group-hover:scale-105 transition-transform">
+              <Bell className="w-5 h-5" />
+            </div>
+            <div className="flex flex-col text-left">
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-0.5">공지사항</h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">업데이트 내역 및 주요 소식을 확인하세요</p>
+            </div>
+          </div>
+          <ChevronRight className="w-5 h-5 text-slate-300 dark:text-slate-600 group-hover:text-slate-400 dark:group-hover:text-slate-400 transition-colors shrink-0" />
+        </button>
+      </div>
+
+      {/* 1. Display */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
         <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
           <h2 className="text-[13px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">{t('settings.display.title')}</h2>
@@ -505,6 +529,12 @@ export default function Settings({
       </div>
 
       {/* Modals */}
+      <AnimatePresence>
+        {showNoticeModal && (
+          <NoticeModal onClose={() => setShowNoticeModal(false)} />
+        )}
+      </AnimatePresence>
+
       {showResetModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-4">
           <motion.div

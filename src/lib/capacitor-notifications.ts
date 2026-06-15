@@ -2,6 +2,19 @@ import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { StudyAlarm, Book } from '../types';
 
+export const checkNotificationPermission = async () => {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const perm = await LocalNotifications.checkPermissions();
+      return perm.display === 'granted';
+    } catch (e) {
+      console.error('Failed to check notification permission:', e);
+      return false;
+    }
+  }
+  return true;
+};
+
 export const requestNotificationPermission = async () => {
   if (Capacitor.isNativePlatform()) {
     try {
