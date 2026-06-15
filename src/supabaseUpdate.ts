@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 // 1. Supabase 서버 연결 (본인 정보로 수정)
 const supabaseUrl = 'https://tbrdurryhpgjtrsihacu.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRicmR1cnJ5aHBnanRyc2loYWN1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5NzgzOTUsImV4cCI6MjA5NjU1NDM5NX0.G5Ft6TsTeybAR94eR5rHyVBCgQ3lNkM-AWuhf_9ozys';
-const supabase = createClient(supabaseUrl, supabaseKey);
+export const supabase = createClient(supabaseUrl, supabaseKey);
 
 // 2. 업데이트 확인 및 실행 마법 로직
 export const checkAndApplyUpdate = async () => {

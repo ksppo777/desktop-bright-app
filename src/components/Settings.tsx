@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from 'react-i18next';
 import { initAuth, googleSignIn, logout, User } from "../lib/auth";
-import { syncToDrive, syncFromDrive, getDriveSyncMetadata } from "../lib/driveSync";
+import { syncToDrive, syncFromDrive, getDriveSyncMetadata, getDriveSnapshots, BackupSnapshot, createDriveSnapshot } from "../lib/driveSync";
 import { getIsLogMode, setIsLogModeConfig, clearLogs, exportLogsStr } from "../lib/logger";
 import {
   Cloud,
@@ -17,6 +17,7 @@ import {
   AlignLeft,
   Bell,
   ChevronRight,
+  History,
 } from "lucide-react";
 import { clearStorage, setStorage } from "../lib/storage";
 import { cn } from "../lib/utils";
@@ -77,6 +78,9 @@ export default function Settings({
   const [isLogMode, setIsLogMode] = useState(getIsLogMode());
   const [remoteDataTimestamp, setRemoteDataTimestamp] = useState<number | null>(null);
   const [isFetchingRemoteDate, setIsFetchingRemoteDate] = useState(false);
+  const [snapshots, setSnapshots] = useState<BackupSnapshot[]>([]);
+  const [showSnapshots, setShowSnapshots] = useState(false);
+  const [isFetchingSnapshots, setIsFetchingSnapshots] = useState(false);
 
   const showTemporaryStatus = (message: string, duration = 4000) => {
     setSyncStatus(message);
@@ -124,6 +128,7 @@ export default function Settings({
     try {
       const data = getAllData();
       await syncToDrive(data, Date.now());
+      await createDriveSnapshot(data, '수동');
       showTemporaryStatus(t('settings.sync.uploadComplete'));
     } catch (e: any) {
       showTemporaryStatus(t('settings.sync.uploadFailed', { message: e.message }), 6000);
@@ -147,6 +152,30 @@ export default function Settings({
       showTemporaryStatus(t('settings.sync.downloadFailed', { message: e.message }), 6000);
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleFetchSnapshots = async () => {
+    setShowSnapshots(!showSnapshots);
+    if (!showSnapshots) {
+      setIsFetchingSnapshots(true);
+      try {
+        const res = await getDriveSnapshots();
+        setSnapshots(res || []);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setIsFetchingSnapshots(false);
+      }
+    }
+  };
+
+  const handleRestoreSnapshot = (snapshot: BackupSnapshot) => {
+    let proceed = false;
+    try { proceed = window.confirm("선택한 스냅샷으로 데이터를 복원하시겠습니까? 현재 기기의 데이터가 덮어쓰여집니다."); } catch(e) { proceed = true; }
+    if (proceed) {
+      onDataSync(snapshot.data, Date.now());
+      showTemporaryStatus("스냅샷 복원 완료", 3000);
     }
   };
 
@@ -429,6 +458,37 @@ export default function Settings({
                        <option value="wifi_only">{t('settings.sync.network.wifi_only')}</option>
                      </select>
                    </div>
+                 </div>
+
+                 <div className="bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden">
+                    <button onClick={handleFetchSnapshots} className="w-full px-4 py-3 flex items-center justify-between gap-3 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                      <div className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-300">
+                        <History className="w-4 h-4 text-orange-500" />
+                        백업 스냅샷
+                      </div>
+                      <ChevronRight className={cn("w-4 h-4 text-slate-400 transition-transform", showSnapshots && "rotate-90")} />
+                    </button>
+                    {showSnapshots && (
+                      <div className="px-4 pb-4 flex flex-col gap-2">
+                        {isFetchingSnapshots ? (
+                          <div className="text-center py-4 text-xs font-medium text-slate-500">데이터 불러오는 중...</div>
+                        ) : snapshots.length === 0 ? (
+                          <div className="text-center py-4 text-xs font-medium text-slate-500">저장된 스냅샷이 없습니다.</div>
+                        ) : (
+                          snapshots.map((snap) => (
+                            <div key={snap.id} className="flex items-center justify-between gap-2 bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                               <div className="flex flex-col gap-1">
+                                 <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{new Date(snap.timestamp).toLocaleString()}</span>
+                                 <span className="text-[10px] py-0.5 px-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded self-start font-medium">{snap.tag}</span>
+                               </div>
+                               <button onClick={() => handleRestoreSnapshot(snap)} className="px-3 py-1.5 text-xs font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50 rounded-lg transition-colors">
+                                 복원
+                               </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
                  </div>
                  {syncStatus && <p className="text-center font-bold text-sm text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 py-2 rounded-xl">{syncStatus}</p>}
                </div>

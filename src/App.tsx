@@ -33,7 +33,7 @@ import {
 import { cn } from "./lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { differenceInDays, parseISO } from "date-fns";
-import { autoSyncDrive } from "./lib/driveSync";
+import { autoSyncDrive, createDriveSnapshot } from "./lib/driveSync";
 import { appLog } from "./lib/logger";
 
 let capacitorNotifications: any = null;
@@ -675,6 +675,14 @@ export default function App() {
         autoBackupTimerRef.current = null;
       }
     };
+  }, [cloudSyncPayload, isAllLoaded]);
+
+  useEffect(() => {
+    if (!isAllLoaded) return;
+    const interval = Math.floor(Math.random() * 1000) + window.setInterval(() => {
+       createDriveSnapshot(cloudSyncPayload);
+    }, 5 * 60 * 1000);
+    return () => window.clearInterval(interval);
   }, [cloudSyncPayload, isAllLoaded]);
 
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
