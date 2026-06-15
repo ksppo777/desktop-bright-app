@@ -2,15 +2,18 @@ from pathlib import Path
 from PIL import Image
 
 root = Path(r"C:\Users\HAPPYDAY\Desktop\Python Project\App Develop\Apps\latest\icons")
+public_icon = Path(r"C:\Users\HAPPYDAY\Desktop\Python Project\App Develop\Apps\latest\public\icon.png")
 target = Path(r"C:\Users\HAPPYDAY\Desktop\Python Project\App Develop\Apps\latest\src-tauri\icons")
 
-# Use icon.ico if available, otherwise fallback to icon-512.webp
-if (root / "icon.ico").exists():
+# Prefer public/icon.png, otherwise use root/icon.ico, otherwise root/icon-512.webp
+if public_icon.exists():
+    src = public_icon
+elif (root / "icon.ico").exists():
     src = root / "icon.ico"
 elif (root / "icon-512.webp").exists():
     src = root / "icon-512.webp"
 else:
-    raise FileNotFoundError("No source icon found in root icons folder")
+    raise FileNotFoundError("No source icon found in public or root icons folder")
 
 if not target.exists():
     target.mkdir(parents=True)
