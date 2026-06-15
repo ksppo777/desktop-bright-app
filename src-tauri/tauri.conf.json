@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "BrightStudy",
   "version": "2.2.1601",
-  "identifier": "com.brightstudy.app",
+  "identifier": "com.brightstudy.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:3000",
