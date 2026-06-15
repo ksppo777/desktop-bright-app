@@ -5,11 +5,26 @@ import { Network } from '@capacitor/network';
 
 const FILE_NAME = 'BrightStudyData.json';
 
+const isTauri = () => ('__TAURI__' in window);
+
+const safeFetch = async (url: string, options?: any) => {
+  if (isTauri()) {
+    try {
+      const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http');
+      console.log('Using Tauri native fetch for:', url);
+      return await tauriFetch(url, options);
+    } catch (e) {
+      console.log('Tauri HTTP plugin not available, falling back to standard fetch');
+    }
+  }
+  return await fetch(url, options);
+};
+
 const getDriveFileId = async (token: string): Promise<string | null> => {
   console.log('getDriveFileId: 드라이브에서 파일 검색 시도...');
   try {
     const q = encodeURIComponent(`name='${FILE_NAME}'`);
-    const res = await fetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id)`, {
+    const res = await safeFetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id)`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!res.ok) {
@@ -54,7 +69,7 @@ export const syncToDrive = async (appData: any, localTimestamp: number) => {
     if (!targetFileId) {
       console.log('syncToDrive: 파일이 존재하지 않아 새로 생성합니다 (FILE_NAME).');
       // 1. Create file metadata
-      const metaRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+      const metaRes = await safeFetch('https://www.googleapis.com/drive/v3/files', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -87,7 +102,7 @@ export const syncToDrive = async (appData: any, localTimestamp: number) => {
     
     console.log('syncToDrive: 기기 데이터 업로드 시도...', { targetFileId });
     // 2. Upload file content
-    const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${targetFileId}?uploadType=media`, {
+    const res = await safeFetch(`https://www.googleapis.com/upload/drive/v3/files/${targetFileId}?uploadType=media`, {
       method: 'PATCH',
       headers: { 
         Authorization: `Bearer ${token}`,
@@ -123,7 +138,7 @@ export const getDriveSyncMetadata = async (): Promise<number | null> => {
     if (!fileId) return null;
     
     // We can just query `fields=modifiedTime` instead of downloading the whole file!
-    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=modifiedTime`, {
+    const res = await safeFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=modifiedTime`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!res.ok) return null;
@@ -155,7 +170,7 @@ export const syncFromDrive = async (): Promise<{ data: any, timestamp: number } 
     }
 
     console.log(`syncFromDrive: 대상 파일 발견 (ID: ${fileId}), 다운로드 시도...`);
-    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+    const res = await safeFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     
@@ -228,3 +243,4 @@ export const autoSyncDrive = async (
      throw e;
   }
 };
+
