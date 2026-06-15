@@ -18,11 +18,22 @@ import {
   Bell,
   ChevronRight,
   History,
+  Info,
 } from "lucide-react";
 import { clearStorage, setStorage } from "../lib/storage";
 import { cn } from "../lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 import NoticeModal from "./NoticeModal";
+import { Capacitor } from "@capacitor/core";
+import { App as CapApp } from '@capacitor/app';
+import { NOTICES } from "../data/notices";
+import packageJson from '../../package.json';
+
+const getLatestVersion = () => {
+  const sorted = [...NOTICES].sort((a, b) => b.date.localeCompare(a.date));
+  const latest = sorted.filter(n => !n.pinned)[0];
+  return latest ? latest.version : packageJson.version;
+};
 
 interface SettingsProps {
   isDarkMode: boolean;
@@ -81,6 +92,7 @@ export default function Settings({
   const [snapshots, setSnapshots] = useState<BackupSnapshot[]>([]);
   const [showSnapshots, setShowSnapshots] = useState(false);
   const [isFetchingSnapshots, setIsFetchingSnapshots] = useState(false);
+  const [appVersion, setAppVersion] = useState<string>(getLatestVersion());
 
   const showTemporaryStatus = (message: string, duration = 4000) => {
     setSyncStatus(message);
@@ -518,6 +530,24 @@ export default function Settings({
         </div>
         <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
           
+          {/* App Version */}
+          <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
+             <div className="flex items-center gap-3">
+               <div className="w-8 h-8 rounded-lg bg-teal-50 dark:bg-teal-900/30 flex items-center justify-center text-teal-600 dark:text-teal-400 shrink-0">
+                 <Info className="w-4 h-4" />
+               </div>
+               <div className="flex flex-col">
+                 <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-0.5">현재 앱 버전</h3>
+                 <p className="text-[11px] text-slate-500 dark:text-slate-400">빌드 및 릴리즈 정보</p>
+               </div>
+             </div>
+             <div className="shrink-0 flex items-center justify-center bg-slate-100 dark:bg-slate-700/50 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 shadow-sm ml-11 sm:ml-0">
+               <span className="font-mono text-xs font-bold text-slate-600 dark:text-slate-300">
+                 {appVersion.startsWith('v') ? appVersion : `v${appVersion}`}
+               </span>
+             </div>
+          </div>
+
           {/* Support */}
           <div className="px-5 py-4 flex items-center justify-between gap-4">
             <div>
