@@ -1,4 +1,13 @@
 {
+  "calculationBasis": "計算基準",
+  "basisPage": "ページ",
+  "basisChapter": "チャプター数",
+  "chaptersPerDay": "チャプター / 日",
+  "chapterPrefix": "プレフィックス",
+  "prefixNone": "なし",
+  "prefixSequential": "連番 (1, 2...)",
+  "prefixReverse": "逆順 (N, N-1...)",
+  "prefixCustom": "カスタム",
   "nav": {
     "home": "ホーム",
     "plan": "今日の計画",
@@ -12,6 +21,7 @@
   "common": {
     "save": "保存",
     "cancel": "キャンセル",
+    "confirm": "確認",
     "delete": "削除",
     "add": "追加",
     "edit": "編集",
@@ -23,8 +33,14 @@
     "second": "秒",
     "none": "なし",
     "done": "完了",
-    "close": "閉じる"
+    "close": "閉じる",
+    "collapse": "折りたたむ",
+    "expand": "展開",
+    "enabled": "有効",
+    "disabled": "無効"
   },
+  "allAutoGoals": "自動目標リスト",
+  "chapterCount": "{{count}}チャプター",
   "languageSelection": {
     "title": "言語の選択",
     "subtitle": "Select Language / 言語の選択",
@@ -65,7 +81,9 @@
       "quotePlaceholder": "自分の名言を入力してください...",
       "refresh": "更新",
       "editPin": "編集(固定)",
-      "goalWithCount": "目標: {{count}}回"
+      "goalWithCount": "目標: {{count}}回",
+      "completeGoalConfirmation": "今日の挑戦を完了しますか？",
+      "undoGoalConfirmation": "挑戦の完了を取り消しますか？"
       ,
       "studyStatusTitle": "今日の学習状況",
       "settings": "設定",
@@ -225,6 +243,9 @@
   "todayPlan": {
     "title": "今日の学習計画",
     "subtitle": "タイムテーブルを設定して目標を記入しましょう。",
+    "planAhead": "事前計画",
+    "planAheadDateLabel": "計画する日付を選択",
+    "planAheadWarning": "今日の日付は「今日の計画」タブで直接計画してください。",
     "dailyGoalLabel": "1日の学習目標",
     "hoursLabel": "時間",
     "minutesLabel": "分",
@@ -292,7 +313,11 @@
     "syncStart": "連携を開始",
     "defaultStudyTitle": "基本学習（未指定）",
     "focusButton": "フォーカス",
-    "breakButton": "休憩"
+    "breakButton": "休憩",
+    "stopwatchMode": "ストップウォッチモード",
+    "stopwatchDescription": "制限なしで時間を計測します。",
+    "confirmModeSwitchTitle": "モード切り替え確認",
+    "confirmModeSwitchMessage": "現在計測中の学習時間があります。モードを切り替えると現在計測された時間が記録され、新しいモードに切り替わります。続行しますか？"
   }
   ,
   "calendar": {
@@ -314,6 +339,7 @@
   }
 
   ,"settings": {
+    "notice": { "title": "お知らせ", "desc": "アップデート履歴や重要なお知らせをご確認ください。" },
     "display": { "title": "表示と環境設定" },
     "language": { "title": "言語設定", "desc": "アプリで使用する言語を選択してください。", "ko": "한국어", "en": "English", "ja": "日本語" },
     "theme": { "title": "テーマ", "desc": "目に優しいテーマに切り替えます。", "light": "ライト", "dark": "ダーク" },
@@ -343,19 +369,54 @@
       "remoteData": "Googleクラウドバックアップ (最新)",
       "checking": "確認中...",
       "networkTitle": "バックアップ/同期に使用するネットワーク",
-      "network": { "all": "Wi-Fiとモバイルデータ", "wifi_only": "Wi-Fiのみ (モバイルデータ節約)" }
+      "network": { "all": "Wi-Fiとモバイルデータ", "wifi_only": "Wi-Fiのみ (モバイルデータ節約)" },
+      "snapshotsTitle": "バックアップスナップショット",
+      "snapshotsLoading": "データを読み込み中...",
+      "snapshotsEmpty": "保存されたスナップショットはありません。",
+      "snapshotRestore": "復元",
+      "snapshotRestoreConfirm": "選択したスナップショットでデータを復元しますか？現在のデバイスのデータが上書きされます。",
+      "snapshotRestoreComplete": "スナップショット復元完了",
+      "resetData": "初期化 (リロード)"
     },
 
     "localSave": { "title": "デバイスに保存", "desc": "オフラインでもデータを安全に保持します。", "saveButton": "手動保存", "saved": "すべてのデータがデバイスに安全に保存されました！", "saveFailed": "手動保存に失敗しました。後でもう一度お試しください。", "manualSaveError": "手動保存に失敗しました" },
 
     "advanced": { "title": "高度な設定とサポート" },
+    "version": { "title": "現在のアプリバージョン", "desc": "ビルド & リリース情報" },
     "support": { "title": "サポート(1:1)", "desc": "エラーやフィードバックをDiscordで送信できます。", "contact": "お問い合わせ", "modalTitle": "サポート", "modalDesc": "バグ報告や改善提案は下のコミュニティへ送ってください。", "discord": "Discordチャンネルを開く" },
 
-    "devLogs": { "title": "デバッグログモード", "desc": "開発者のエラー解析のために動作ログを保存します。", "enabled": "ログモードが有効になりました。", "disabled": "ログモードが無効になりました。", "confirmDelete": "記録されたログをすべて削除しますか？", "deleted": "ログを削除しました。", "clear": "ログを削除", "export": "ログをエクスポート (.json)" },
+    "devLogs": { "title": "デバッグログモード", "desc": "開発者のエラー解析のために動作ログを保存します。", "enabled": "ログモードが有効になりました。", "disabled": "ログモードが無効になりました。", "confirmDelete": "記録されたログをすべて削除しますか？", "deleted": "ログを削除しました。", "clear": "ログを削除", "export": "ログを送信", "copiedToClipboard": "クリップボードに一部コピーされました" },
 
     "factory": { "title": "アプリデータの初期化", "desc": "このデバイスに保存されているアプリ関連データを完全に消去します。", "resetButton": "初期化設定", "confirmTitle": "本当に削除しますか？", "confirmDesc": "削除されたデータは復元できません。クラウドにバックアップを取っている場合は復元できます。" }
   },
+  "permissions": {
+    "overlay": { "title": "他のアプリの上に表示", "desc": "タイマー終了時にすぐに画面を起動し、オーバーレイ情報を表示するための必須権限です。" },
+    "exactAlarm": { "title": "正確なアラーム", "desc": "スリープ中などでも、設定したアラームが正確に開始・終了するようにします。" },
+    "battery": { "title": "バッテリー最適化の無効化", "desc": "バックグラウンドでシステムによるタイマーの強制終了を防ぎます。" },
+    "notifications": { "title": "通知の設定", "desc": "タイマーの進行状況をバーに表示し、休憩時間などをプッシュ通知で知らせます。" },
+    "grantedTitle": "権限が許可されました",
+    "grantedDesc": "権限の設定が完了しました。",
+    "btnGranted": "確認完了",
+    "btnRequest": "権限を許可する",
+    "footer": "デバイスの設定画面で許可ボタンを押してください。"
+  },
+  "alertGuide": {
+    "title": "通知設定ガイド",
+    "intro": "アラームの音とバイブレーションは、スマートフォンの<strong>システム設定</strong>が優先されます。",
+    "soundTitle": "🔔 音声のみ / 音声+バイブ",
+    "soundDesc": "デバイスが「マナーモード」や「サイレント」の場合、音が鳴らないことがあります。メディアの音量を確認してください。",
+    "vibrateTitle": "📳 バイブレーションのみ",
+    "vibrateDesc": "デバイスが「サイレントモード」の場合、またはバイブレーションの強度が0の場合、機能しません。",
+    "screenTitle": "📱 画面通知のみ",
+    "screenDesc": "音やバイブレーションなしで画面にのみ通知が表示されます。静かな図書館などで便利です。",
+    "outro": "このアプリはユーザーの設定を尊重し、マナーモードを無効にして強制的に音を鳴らすことはありません。",
+    "confirm": "確認して起動する"
+  },
   "statistics": {
+    "dailyDetails": "詳細",
+    "unknownSession": "その他の学習",
+    "memoLabel": "学習メモ",
+    "noMemo": "記録されたメモはありません。",
     "streakTitle": "🔥 連続学習日数",
     "todayFocus": "⏱️ 今日の集中時間",
     "totalStudy": "📚 累計学習時間",
@@ -368,6 +429,29 @@
     "timeWithHours": "{{h}}時間 {{m}}分 {{s}}秒",
     "timeNoHours": "{{m}}分 {{s}}秒",
     "studyTime": "学習時間",
+    "3days": "3日",
+    "7days": "7日",
+    "14days": "14日",
+    "30days": "30日",
+    "customRange": "期間指定",
+    "insightTitleCustom": "選択期間の分析",
+    "insightTitleN": "最近{{n}}日間の分析",
+    "insightDescAvg": "1日平均{{h}}時間{{m}}分学習し、",
+    "insightDescAvgShort": "1日平均{{m}}分学習し、",
+    "insightDescTopSubject": "「{{subject}}」に最も集中して取り組みました！🎯",
+    "insightNoData": "学習記録が十分に蓄積されると、パーソナライズされたフィードバックが提供されます。もう少し頑張りましょう！💪",
+    "continuousLearning": "日連続学習中！🔥",
+    "customRangeTitle": "選択期間の学習推移",
+    "dynamicRangeTitle": "最近{{n}}日間の学習推移",
+    "goalLabel": "目標時間",
+    "avgTimeLabel": "平均{{val}}分",
+    "subjectDistributionCustom": "選択期間の科目別学習分布",
+    "subjectDistributionN": "最近{{n}}日間の科目別学習分布",
+    "noData": "データがありません。",
+    "hourlyActivity": "時間帯別集中分布 (All-time)",
+    "lastWeekCompare": "先週比",
+    "timeSame": "変動なし",
+    "lastMonthCompare": "先月比",
     "weeklyStats": "週間",
     "thisWeekTotal": "今週の合計",
     "clickShowWeek": "クリックして曜日表を見る →",
@@ -388,5 +472,21 @@
     "todayDateWarning": "今日の日付は今日の計画タブで編集してください。",
     "study": "学習",
     "achieved": "達成"
+  },
+  "notification": {
+    "focusMode": "集中モード",
+    "breakMode": "休憩モード",
+    "running": "実行中",
+    "remaining": "残り時間",
+    "elapsed": "経過時間",
+    "paused": "一時停止",
+    "play": "再生",
+    "pause": "一時停止",
+    "stop": "停止",
+    "timerComplete": "タイマー完了！",
+    "focusEnded": "お疲れさまでした！休憩を取りましょう。",
+    "breakEnded": "休憩終了！再び集中しましょう。",
+    "appRunning": "Bright Studyが実行中です",
+    "tapToOpen": "タップしてアプリを開く"
   }
 }

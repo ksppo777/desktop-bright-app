@@ -1,8 +1,7 @@
-import { useState, FormEvent, useEffect } from 'react';
+import { useState, FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Plus, Book as BookIcon } from 'lucide-react';
-import { Book } from '../types';
-import { registerBackHandler } from '../lib/backHandler';
+import { Plus, Book as BookIcon } from 'lucide-react';
+import BaseModal from './BaseModal';
 
 interface AddBookModalProps {
   isOpen: boolean;
@@ -25,17 +24,6 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
   const [newBookAuthor, setNewBookAuthor] = useState('');
   const [selectedTheme, setSelectedTheme] = useState(themeColors[0]);
 
-  useEffect(() => {
-    if (isOpen) {
-      return registerBackHandler(() => {
-        onClose();
-        return true;
-      });
-    }
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
-
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!newBookTitle.trim()) return;
@@ -47,18 +35,11 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 dark:bg-slate-900/80 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl w-full max-w-md border border-slate-100 dark:border-slate-700 animate-in fade-in zoom-in-95 duration-200">
+    <BaseModal isOpen={isOpen} onClose={onClose} className="max-w-md p-6 sm:p-8" zIndex={100}>
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2">
              <BookIcon className="w-5 h-5 text-indigo-500" /> {t('bookModal.title')}
           </h3>
-          <button 
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 dark:hover:text-slate-300 rounded-xl transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -108,7 +89,6 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
              </button>
           </div>
         </form>
-      </div>
-    </div>
+    </BaseModal>
   );
 }

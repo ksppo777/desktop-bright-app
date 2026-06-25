@@ -2,7 +2,13 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useLocalStorage } from "./lib/utils";
 import { checkAndApplyUpdate } from "./supabaseUpdate";
 import { getAllKeys } from "./lib/storage";
-import { Book, StudySession, StudyAlarm } from "./types";
+import {
+  Book,
+  StudySession,
+  StudyAlarm,
+  TimeSlotGoal,
+  TimeBlock,
+} from "./types";
 import { useTranslation } from "react-i18next";
 import BookManager from "./components/BookManager";
 import PomodoroTimer from "./components/PomodoroTimer";
@@ -13,6 +19,8 @@ import Alarms from "./components/Alarms";
 import Calendar from "./components/Calendar";
 import TodayPlan from "./components/TodayPlan";
 import PermissionWizard from "./components/PermissionWizard";
+import AlertGuideModal from "./components/AlertGuideModal";
+import { usePermissionChecker } from "./hooks/usePermissionChecker";
 import {
   Book as BookIcon,
   Timer,
@@ -30,10 +38,11 @@ import {
   Trash2,
   Loader2,
 } from "lucide-react";
-import { cn } from "./lib/utils";
+import { cn, useLockBodyScroll } from "./lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { differenceInDays, parseISO } from "date-fns";
-import { autoSyncDrive, createDriveSnapshot } from "./lib/driveSync";
+import { autoSyncDrive, createDriveSnapshot, getDriveSyncMetadata, syncFromDrive, syncToDrive } from "./lib/driveSync";
+import { initAuth } from "./lib/auth";
 import { appLog } from "./lib/logger";
 import { handleBackPress, registerBackHandler } from "./lib/backHandler";
 
@@ -47,6 +56,14 @@ import("./lib/capacitor-notifications")
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
 import { SystemHelper } from "./lib/systemHelper";
+import {
+  startForegroundTimer,
+  pauseForegroundTimer,
+  resumeForegroundTimer,
+  stopForegroundTimer as stopFgTimer,
+  startIdleNotification,
+  addTimerActionListener,
+} from "./lib/foregroundService";
 
 const AUTO_CLOUD_BACKUP_DEBOUNCE_MS = 8000;
 
@@ -74,6 +91,26 @@ export default function App() {
   const [monthlyPlans, setMonthlyPlans, isMonthlyPlansLoaded] = useLocalStorage<
     Record<string, string>
   >("brightstudy_monthly_plans", {});
+  const [timetableRecords, setTimetableRecords, isTimetableRecordsLoaded] =
+    useLocalStorage<Record<string, TimeSlotGoal[]>>(
+      "study-timetable-records",
+      {}
+    );
+  const [globalWakeTimeRaw, setGlobalWakeTimeRaw, isGlobalWakeLoaded] =
+    useLocalStorage<string | number>("study-wake-hour", 8);
+  const [globalSleepTimeRaw, setGlobalSleepTimeRaw, isGlobalSleepLoaded] =
+    useLocalStorage<string | number>("study-sleep-hour", 23);
+  const [dailySettingsDict, setDailySettingsDict, isDailySettingsLoaded] =
+    useLocalStorage<
+      Record<
+        string,
+        { goal: number; wake: string | number; sleep: string | number }
+      >
+    >("study-daily-settings", {});
+  const [dailyLayouts, setDailyLayouts, isDailyLayoutsLoaded] = useLocalStorage<
+    Record<string, TimeBlock[]>
+  >("study-timetable-layouts", {});
+
   const [dailyGoalMinutes, setDailyGoalMinutes, isDailyGoalLoaded] =
     useLocalStorage<number>("study-helper-daily-goal", 120);
   const [isDarkMode, setIsDarkMode, isDarkLoaded] = useLocalStorage<boolean>(
@@ -111,6 +148,8 @@ export default function App() {
     setHasSeenPermissionWizard,
     isWizardFlagLoaded,
   ] = useLocalStorage<boolean>("study-helper-seen-wizard", false);
+  const [hasSeenAlertGuide, setHasSeenAlertGuide, isAlertGuideLoaded] =
+    useLocalStorage<boolean>("study-helper-seen-alert-guide", false);
   const [showNavLabelsMobile, setShowNavLabelsMobile, isNavLabelsLoaded] =
     useLocalStorage<boolean>("study-helper-nav-labels", false);
   const [dDaySize, setDDaySize, isDDaySizeLoaded] = useLocalStorage<number>(
@@ -126,6 +165,11 @@ export default function App() {
 
   const [localDataTimestamp, setLocalDataTimestamp, isLocalTimestampLoaded] =
     useLocalStorage<number>("study-helper-timestamp", Date.now());
+  const [isFirstSyncDone, setIsFirstSyncDone] = useState(false);
+  const [showConflictModal, setShowConflictModal] = useState(false);
+  const [conflictInfo, setConflictInfo] = useState<{ localTime: number; remoteTime: number } | null>(null);
+  const [googleUser, setGoogleUser] = useState<any>(null);
+  const [googleToken, setGoogleToken] = useState<string | null>(null);
   const [syncNetworkPreference, setSyncNetworkPreference, isSyncNetworkLoaded] =
     useLocalStorage<"all" | "wifi_only">("study-helper-network-pref", "all");
   const [language, setLanguage, isLanguageLoaded] = useLocalStorage<
@@ -133,6 +177,38 @@ export default function App() {
   >("study-helper-language", null);
   const [isNewInstallCheckDone, setIsNewInstallCheckDone] = useState(false);
   const [showAppExitModal, setShowAppExitModal] = useState(false);
+
+  const [forceShowPermissionWizard, setForceShowPermissionWizard] =
+    useState(false);
+  const {
+    isChecking: isPermsChecking,
+    permissionsState,
+    checkPerms,
+  } = usePermissionChecker();
+
+  useEffect(() => {
+    if (Capacitor.isNativePlatform() && !isPermsChecking) {
+      const allGranted =
+        permissionsState.overlay &&
+        permissionsState.exactAlarm &&
+        permissionsState.notifications &&
+        permissionsState.batteryOptimization;
+      if (!allGranted) {
+        setForceShowPermissionWizard(true);
+      } else {
+        setForceShowPermissionWizard(false);
+        if (isWizardFlagLoaded && !hasSeenPermissionWizard) {
+          setHasSeenPermissionWizard(true);
+        }
+      }
+    }
+  }, [
+    isPermsChecking,
+    permissionsState,
+    isWizardFlagLoaded,
+    hasSeenPermissionWizard,
+    setHasSeenPermissionWizard,
+  ]);
 
   useEffect(() => {
     let unregisterCapacitor: any;
@@ -203,6 +279,11 @@ export default function App() {
     isAlarmsLoaded &&
     isWeeklyPlansLoaded &&
     isMonthlyPlansLoaded &&
+    isTimetableRecordsLoaded &&
+    isGlobalWakeLoaded &&
+    isGlobalSleepLoaded &&
+    isDailySettingsLoaded &&
+    isDailyLayoutsLoaded &&
     isDailyGoalLoaded &&
     isDarkLoaded &&
     isAutoGoalLoaded &&
@@ -223,37 +304,131 @@ export default function App() {
       books,
       sessions,
       alarms,
-      isDarkMode,
       weeklyPlans,
       monthlyPlans,
+      timetableRecords,
+      globalWakeTimeRaw,
+      globalSleepTimeRaw,
+      dailySettingsDict,
+      dailyLayouts,
       dailyGoalMinutes,
-      autoGoalDisplayMode,
       dDay,
-      globalFontSize,
-      preventWordWrap,
-      showNavLabelsMobile,
       dDaySize,
-      language,
-      hideHeroText,
     }),
     [
       books,
       sessions,
       alarms,
-      isDarkMode,
       weeklyPlans,
       monthlyPlans,
+      timetableRecords,
+      globalWakeTimeRaw,
+      globalSleepTimeRaw,
+      dailySettingsDict,
+      dailyLayouts,
       dailyGoalMinutes,
-      autoGoalDisplayMode,
       dDay,
-      globalFontSize,
-      preventWordWrap,
-      showNavLabelsMobile,
       dDaySize,
-      language,
-      hideHeroText,
     ]
   );
+
+  // 1. Google 로그인 세션 구독
+  useEffect(() => {
+    const unsubscribe = initAuth(
+      (user, token) => {
+        console.log("App.tsx: Google 로그인 성공 감지", user.email);
+        setGoogleUser(user);
+        setGoogleToken(token);
+      },
+      () => {
+        console.log("App.tsx: Google 로그아웃 상태 감지");
+        setGoogleUser(null);
+        setGoogleToken(null);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  // 2. 로그인 상태에 따른 1회 초기 동기화(Pull) 수행 및 Lock 해제
+  useEffect(() => {
+    if (!isAllLoaded) return;
+
+    if (!googleToken) {
+      // 로그인되어 있지 않은 경우에는 즉시 로컬 모드로 동작하도록 완료 처리
+      setIsFirstSyncDone(true);
+      return;
+    }
+
+    // 로그인된 상태라면, 첫 동기화 완료 전까지 Lock 설정
+    setIsFirstSyncDone(false);
+
+    const performInitialSync = async () => {
+      try {
+        console.log("App.tsx: 초기 동기화(Pull) 시도 중...");
+        setAutoBackupStatus("초기 동기화 진행 중...");
+        const remote = await syncFromDrive();
+        
+        if (remote) {
+          const lastSyncRemote = parseInt(localStorage.getItem('study-helper-last-sync-remote-timestamp') || '0', 10);
+          const localTS = localDataTimestamp;
+
+          // 양방향 충돌이 있는가?
+          if (localTS > remote.timestamp && remote.timestamp > lastSyncRemote) {
+            console.log("App.tsx: 기동 시 충돌 감지됨!", { localTS, remoteTS: remote.timestamp, lastSyncRemote });
+            setConflictInfo({ localTime: localTS, remoteTime: remote.timestamp });
+            setShowConflictModal(true);
+            setAutoBackupStatus("동기화 충돌 대기 중");
+          } else if (remote.timestamp > localTS) {
+            console.log("App.tsx: 클라우드 데이터가 더 최신이므로 로컬 업데이트");
+            onDataSync(remote.data, remote.timestamp);
+            setAutoBackupStatus("초기 동기화 완료");
+            setIsFirstSyncDone(true);
+          } else {
+            console.log("App.tsx: 로컬 데이터가 최신이거나 같으므로 클라우드 덮어쓰기");
+            await syncToDrive(cloudSyncPayload, localTS);
+            setAutoBackupStatus("초기 동기화 완료");
+            setIsFirstSyncDone(true);
+          }
+        } else {
+          // 구글 드라이브에 백업이 없는 경우 새로 업로드
+          console.log("App.tsx: 원격 백업 없음, 최초 업로드 중...");
+          await syncToDrive(cloudSyncPayload, localDataTimestamp);
+          setAutoBackupStatus("초기 동기화 완료");
+          setIsFirstSyncDone(true);
+        }
+      } catch (e: any) {
+        console.error("App.tsx: 초기 동기화 실패:", e);
+        setAutoBackupStatus(`초기 동기화 실패: ${e.message}`);
+        // 에러가 나더라도 오프라인 사용은 가능하도록 Lock 해제
+        setIsFirstSyncDone(true);
+      }
+    };
+
+    performInitialSync();
+  }, [googleToken, isAllLoaded]);
+
+  // 3. 사용자가 데이터를 '진짜 수동으로 변경'할 때만 localDataTimestamp 갱신
+  // isFirstSyncDone이 true가 된 이후에 cloudSyncPayload의 내용이 변경되는 시점만 캐치!
+  const prevPayloadRef = useRef<any>(null);
+  useEffect(() => {
+    if (!isAllLoaded || !isFirstSyncDone) {
+      // 로딩 중이거나 초기 동기화 진행 중일 때는 스킵하여 로컬 타임스탬프를 보존
+      if (isAllLoaded) {
+        prevPayloadRef.current = cloudSyncPayload;
+      }
+      return;
+    }
+
+    if (prevPayloadRef.current && prevPayloadRef.current !== cloudSyncPayload) {
+      // payload가 실질적으로 바뀌었으므로 사용자가 편집한 시점으로 타임스탬프 업데이트!
+      const isActuallyChanged = JSON.stringify(prevPayloadRef.current) !== JSON.stringify(cloudSyncPayload);
+      if (isActuallyChanged) {
+        console.log("App.tsx: 사용자 데이터 수정 감지! localDataTimestamp 갱신");
+        setLocalDataTimestamp(Date.now());
+      }
+    }
+    prevPayloadRef.current = cloudSyncPayload;
+  }, [cloudSyncPayload, isAllLoaded, isFirstSyncDone]);
 
   const autoBackupEnabledRef = useRef(false);
   const autoBackupTimerRef = useRef<number | null>(null);
@@ -330,7 +505,9 @@ export default function App() {
   const [timeLeft, setTimeLeft] = useState(25 * 60);
   const [isActive, setIsActive] = useState(false);
   const [timerMode, setTimerMode] = useState<"focus" | "break">("focus");
-  const [timerType, setTimerType] = useState<"beginner" | "expert">("beginner");
+  const [timerType, setTimerType] = useState<
+    "beginner" | "expert" | "stopwatch"
+  >("beginner");
   const [expertTime, setExpertTime] = useState({
     hours: 0,
     minutes: 25,
@@ -351,6 +528,67 @@ export default function App() {
   >(null);
   const [activeAlarmNotification, setActiveAlarmNotification] =
     useState<StudyAlarm | null>(null);
+
+  useEffect(() => {
+    // Check auto-restore backup
+    const backupStr = localStorage.getItem("study_timer_backup");
+    if (backupStr) {
+      try {
+        const backup = JSON.parse(backupStr);
+        if (backup && backup.isActive) {
+          const elapsed = Math.floor(
+            (Date.now() - backup.startTimestamp) / 1000
+          );
+
+          if (backup.timerMode) setTimerMode(backup.timerMode);
+          if (backup.timerType) setTimerType(backup.timerType);
+          if (backup.timerBookId) setTimerBookId(backup.timerBookId);
+          if (backup.timerChapterId) setTimerChapterId(backup.timerChapterId);
+
+          if (backup.timerType === "stopwatch") {
+            const restoredTime = backup.baseTimeLeft + elapsed;
+            setTimeLeft(Math.max(0, restoredTime));
+            setIsActive(true);
+          } else {
+            const restoredTime = backup.baseTimeLeft - elapsed;
+            if (restoredTime <= 0) {
+              const exactEndTimestamp =
+                backup.startTimestamp + backup.baseTimeLeft * 1000;
+              const exactEndDate = new Date(exactEndTimestamp).toISOString();
+
+              setIsActive(false);
+              setTimeLeft(0);
+
+              if (backup.timerMode === "focus") {
+                addStudySession(
+                  backup.initialTimeLeft,
+                  backup.timerBookId,
+                  backup.timerChapterId,
+                  undefined,
+                  exactEndDate
+                );
+                setTimerEndNotification("focus_ended");
+              } else {
+                setTimerEndNotification("break_ended");
+              }
+            } else {
+              setTimeLeft(restoredTime);
+              setIsActive(true);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Failed to restore timer backup", e);
+        localStorage.removeItem("study_timer_backup");
+      }
+    }
+  }, []);
+
+  useLockBodyScroll(
+    showAppExitModal ||
+      timerEndNotification !== null ||
+      activeAlarmNotification !== null
+  );
 
   useEffect(() => {
     if (timerEndNotification) {
@@ -402,7 +640,9 @@ export default function App() {
       audio.play().catch(() => {});
     }
     if (mode === "vibrate" || mode === "both") {
-      if (navigator.vibrate) {
+      if (Capacitor.isNativePlatform()) {
+        SystemHelper.vibrate().catch(() => {});
+      } else if (navigator.vibrate) {
         navigator.vibrate([500, 200, 500, 200, 500]);
       }
     }
@@ -421,59 +661,230 @@ export default function App() {
     isActive,
     timeLeft,
     timerMode,
+    timerType,
   });
 
   useEffect(() => {
-    timerStateRef.current = { isActive, timeLeft, timerMode };
-  }, [isActive, timeLeft, timerMode]);
+    timerStateRef.current = { isActive, timeLeft, timerMode, timerType };
+  }, [isActive, timeLeft, timerMode, timerType]);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
-    const listener = CapApp.addListener(
-      "appStateChange",
-      ({ isActive: appActive }) => {
-        const { isActive, timeLeft, timerMode } = timerStateRef.current;
-        if (!appActive) {
-          // App went to background
-          if (isActive && timeLeft > 0 && capacitorNotifications) {
-            capacitorNotifications.scheduleTimerNotification(
-              timeLeft,
-              timerMode
-            );
-          }
-        } else {
-          // App came to foreground
-          if (capacitorNotifications) {
-            capacitorNotifications.cancelTimerNotification();
-          }
+    let appListenerHandle: any = null;
+
+    CapApp.addListener("appStateChange", ({ isActive: appActive }) => {
+      const { isActive, timeLeft, timerMode, timerType } =
+        timerStateRef.current;
+      if (!appActive) {
+        // App went to background
+        if (
+          isActive &&
+          timeLeft > 0 &&
+          timerType !== "stopwatch" &&
+          capacitorNotifications
+        ) {
+          capacitorNotifications.scheduleTimerNotification(timeLeft, timerMode);
+        }
+      } else {
+        // App came to foreground
+        if (capacitorNotifications) {
+          capacitorNotifications.cancelTimerNotification();
         }
       }
-    );
+    }).then((l) => {
+      appListenerHandle = l;
+    });
 
     return () => {
-      listener.then((l) => l.remove());
+      if (appListenerHandle) appListenerHandle.remove();
     };
   }, []);
 
-  const initialTimeLeft =
-    timerMode === "focus"
-      ? timerType === "beginner"
+  // 타이머 제목 생성
+  const timerTitle = useMemo(() => {
+    let title = t("pomodoro.defaultStudyTitle");
+    if (timerBookId) {
+      const book = books.find((b) => b.id === timerBookId);
+      if (book) {
+        title = book.title;
+        if (timerChapterId) {
+          const chapter = book.chapters?.find((c) => c.id === timerChapterId);
+          if (chapter) title += ` - ${chapter.title}`;
+        }
+      }
+    }
+    return title;
+  }, [timerBookId, timerChapterId, books, t]);
+
+  const initialTimeLeft = useMemo(() => {
+    return timerMode === "focus"
+      ? timerType === "stopwatch"
+        ? 0
+        : timerType === "beginner"
         ? 25 * 60
         : expertTime.hours * 3600 + expertTime.minutes * 60 + expertTime.seconds
+      : timerType === "stopwatch"
+      ? 0
       : timerType === "beginner"
       ? 5 * 60
       : expertBreakTime.hours * 3600 +
         expertBreakTime.minutes * 60 +
         expertBreakTime.seconds;
+  }, [timerMode, timerType, expertTime, expertBreakTime]);
+
+  // Foreground Service: 앱 초기화 및 isActive 상태 변화 연동
+  const fgInitializedRef = useRef(false);
+  const prevIsActiveRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || !isAllLoaded) return;
+
+    // 1. 최초 초기화 시점
+    if (!fgInitializedRef.current) {
+      fgInitializedRef.current = true;
+      prevIsActiveRef.current = isActive;
+      if (isActive) {
+        startForegroundTimer(
+          timerMode,
+          timerType,
+          timeLeft,
+          timerTitle,
+          timerAlertMode,
+          t
+        );
+      } else {
+        startIdleNotification(t);
+      }
+      return;
+    }
+
+    // 2. 상태 변화 감지 시점
+    const wasActive = prevIsActiveRef.current;
+    prevIsActiveRef.current = isActive;
+
+    if (isActive && !wasActive) {
+      // 비활성 → 활성: 타이머 시작
+      startForegroundTimer(
+        timerMode,
+        timerType,
+        timeLeft,
+        timerTitle,
+        timerAlertMode,
+        t
+      );
+    } else if (!isActive && wasActive) {
+      // 활성 → 비활성: 일시정지
+      const isPaused =
+        timerType === "stopwatch" ? timeLeft > 0 : timeLeft < initialTimeLeft && timeLeft > 0;
+      if (isPaused) {
+        pauseForegroundTimer();
+      }
+      // 정지(idle)는 stopFgTimer 호출 위치(stopTimer 함수)에서 직접 처리
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAllLoaded, isActive]);
+
+  // Foreground Service: 타이머가 실행 중일 때 제목, 알림 설정, 언어 변경 시 알림 정보 업데이트
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || !isAllLoaded || !isActive) return;
+    startForegroundTimer(
+      timerMode,
+      timerType,
+      timeLeft,
+      timerTitle,
+      timerAlertMode,
+      t
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timerTitle, timerAlertMode, t]);
+
+  // Foreground Service: 타이머가 비활성(idle) 상태일 때 언어 변경 시 idle 알림 정보 업데이트
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || !isAllLoaded || isActive) return;
+    startIdleNotification(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t]);
+
+  // Handle App State Changes (Background/Foreground)
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let appListenerHandle: any = null;
+
+    CapApp.addListener("appStateChange", ({ isActive: appActive }) => {
+      const { isActive, timeLeft, timerMode, timerType } =
+        timerStateRef.current;
+      if (!appActive) {
+        // App went to background
+        if (
+          isActive &&
+          timeLeft > 0 &&
+          timerType !== "stopwatch" &&
+          capacitorNotifications
+        ) {
+          capacitorNotifications.scheduleTimerNotification(timeLeft, timerMode);
+        }
+      } else {
+        // App came to foreground
+        if (capacitorNotifications) {
+          capacitorNotifications.cancelTimerNotification();
+        }
+      }
+    }).then((l) => {
+      appListenerHandle = l;
+    });
+
+    return () => {
+      if (appListenerHandle) appListenerHandle.remove();
+    };
+  }, []);
+
+  // Foreground Service: 알림 버튼 액션 이벤트 리스너
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    let handle: { remove: () => void } | null = null;
+
+    addTimerActionListener((action, remainingSeconds) => {
+      if (action === "play") {
+        setIsActive(true);
+      } else if (action === "pause") {
+        setIsActive(false);
+      } else if (action === "stop") {
+        // 알림 버튼의 정지 버튼 클릭 → React 상태만 업데이트
+        // (Java 서비스가 이미 idle 알림으로 전환했으므로 startIdleNotification 호출 불필요)
+        if (timerMode === "focus" && remainingSeconds > 0) {
+          addStudySession(remainingSeconds, timerBookId, timerChapterId);
+        }
+        setIsActive(false);
+        setTimeLeft(initialTimeLeft);
+      } else if (action === "complete") {
+        // 타이머 완료 (카운트다운 0 도달)
+        if (timerMode === "focus") {
+          addStudySession(remainingSeconds, timerBookId, timerChapterId);
+          setTimerEndNotification("focus_ended");
+        } else {
+          setTimerEndNotification("break_ended");
+        }
+        setIsActive(false);
+        setTimeLeft(0);
+        startIdleNotification(t);
+      }
+    }).then((h) => { handle = h; });
+
+    return () => { if (handle) handle.remove(); };
+  }, [timerMode, timerBookId, timerChapterId, initialTimeLeft]);
 
   const realTimeAddedSeconds =
-    (isActive || (!isActive && timeLeft < initialTimeLeft)) &&
-    timerMode === "focus"
+    timerType === "stopwatch"
+      ? timerMode === "focus" && (isActive || (!isActive && timeLeft > 0))
+        ? timeLeft
+        : 0
+      : (isActive || (!isActive && timeLeft < initialTimeLeft)) &&
+        timerMode === "focus"
       ? initialTimeLeft - timeLeft
       : 0;
 
-  const addStudySession = (
+  const addStudySession = async (
     seconds: number,
     bookIdParam?: string,
     chapterIdParam?: string,
@@ -494,29 +905,148 @@ export default function App() {
       }
     }
 
-    const durationMinutes = Math.max(1, Math.floor(seconds / 60));
+    const endTime = dateParam ? new Date(dateParam) : new Date();
 
-    const baseSession: StudySession = {
-      id: Date.now().toString(),
-      date: dateParam || new Date().toISOString(),
-      durationMinutes: durationMinutes,
-      durationSeconds: seconds,
-      bookId: bookIdParam,
-      chapterId: chapterIdParam,
-      title: finalTitle,
-    };
+    let remainingSeconds = seconds;
+    let currentEndMs = endTime.getTime();
+    const newSessions: StudySession[] = [];
 
+    let activeSync: typeof syncIntention = null;
     if (syncIntention) {
-      // Find the record and attach the timetable block ID if necessary
-      baseSession.timetableDate = syncIntention.targetDateStr;
-      if (syncIntention.blockId) {
-        baseSession.timetableBlockId = syncIntention.blockId;
-      }
+      activeSync = { ...syncIntention };
       setSyncIntention(null);
     }
 
-    setSessions((prev) => [...prev, baseSession]);
-    appLog("INFO", "Study session added", baseSession);
+    while (remainingSeconds > 0) {
+      const currentEnd = new Date(currentEndMs);
+      const currentStartOfDayMs = new Date(
+        currentEnd.getFullYear(),
+        currentEnd.getMonth(),
+        currentEnd.getDate()
+      ).getTime();
+
+      const currentDateStr = [
+        currentEnd.getFullYear(),
+        String(currentEnd.getMonth() + 1).padStart(2, "0"),
+        String(currentEnd.getDate()).padStart(2, "0"),
+      ].join("-");
+
+      let boundMs = currentStartOfDayMs;
+      let blockIdForSession: string | undefined = undefined;
+
+      if (activeSync) {
+        try {
+          const utils = await import("./lib/timetableUtils");
+          const layouts = await utils.getDailyLayouts(currentDateStr);
+
+          const msFromStartOfDay = currentEndMs - currentStartOfDayMs;
+          // Subtract a tiny amount so exactly 08:00 falls into the 07:00-08:00 block
+          const effectiveMins = msFromStartOfDay / 60000 - 0.001;
+
+          if (effectiveMins >= 0) {
+            let currentBlock = layouts.find((b) => {
+              const st = utils.parseMins(b.startTime);
+              let et = utils.parseMins(b.endTime);
+              if (et <= st) et += 24 * 60;
+              return effectiveMins >= st && effectiveMins < et;
+            });
+
+            if (
+              !currentBlock &&
+              activeSync.blockId &&
+              remainingSeconds === Math.max(1, Math.floor(seconds))
+            ) {
+              currentBlock = layouts.find((b) => b.id === activeSync!.blockId);
+            }
+
+            if (currentBlock) {
+              const startBlockMs =
+                currentStartOfDayMs +
+                utils.parseMins(currentBlock.startTime) * 60000;
+              if (startBlockMs > boundMs) boundMs = startBlockMs;
+              blockIdForSession = currentBlock.id;
+
+              const records = await utils.getTimetableRecords(currentDateStr);
+              const hasRecord = records.find(
+                (r: any) =>
+                  r.blockId === currentBlock?.id ||
+                  (r.hour !== undefined &&
+                    `${String(r.hour).padStart(2, "0")}:00` ===
+                      currentBlock?.id)
+              );
+
+              if (!hasRecord) {
+                const newRecords = [
+                  ...records,
+                  {
+                    id:
+                      Date.now().toString() +
+                      Math.random().toString(36).substring(2, 5),
+                    blockId: currentBlock!.id,
+                    bookId: bookIdParam || "",
+                    chapterId: chapterIdParam || "",
+                    startPage: 0,
+                    endPage: 0,
+                    memo: "",
+                    isAutoSynced: true,
+                  },
+                ];
+                await utils.saveTimetableRecords(currentDateStr, newRecords);
+                setTimetableRecords((prev) => ({
+                  ...prev,
+                  [currentDateStr]: newRecords,
+                }));
+              }
+            } else if (activeSync.blockId) {
+              blockIdForSession = activeSync.blockId;
+            }
+          }
+        } catch (e) {
+          appLog("ERROR", "Failed to split auto-sync blocks", e);
+        }
+      }
+
+      const currentStartMs = currentEndMs - remainingSeconds * 1000;
+
+      if (currentStartMs >= boundMs) {
+        // Fits entirely within this chunk
+        newSessions.push({
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+          date: new Date(currentEndMs).toISOString(),
+          durationMinutes: Math.max(1, Math.floor(remainingSeconds / 60)),
+          durationSeconds: Math.floor(remainingSeconds),
+          bookId: bookIdParam,
+          chapterId: chapterIdParam,
+          title: finalTitle,
+          timetableDate: blockIdForSession ? currentDateStr : undefined,
+          timetableBlockId: blockIdForSession, // keeping this
+        });
+        remainingSeconds = 0;
+      } else {
+        // Hits a boundary
+        const secondsInChunk = (currentEndMs - boundMs) / 1000;
+        if (secondsInChunk > 0) {
+          newSessions.push({
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+            date: new Date(currentEndMs).toISOString(),
+            durationMinutes: Math.max(1, Math.floor(secondsInChunk / 60)),
+            durationSeconds: Math.floor(secondsInChunk),
+            bookId: bookIdParam,
+            chapterId: chapterIdParam,
+            title: finalTitle,
+            timetableDate: blockIdForSession ? currentDateStr : undefined,
+            timetableBlockId: blockIdForSession, // keeping this
+          });
+        }
+        remainingSeconds -= secondsInChunk;
+        currentEndMs = boundMs === currentStartOfDayMs ? boundMs - 1 : boundMs;
+      }
+    }
+
+    newSessions.reverse(); // Chronological order
+
+    setSessions((prev) => [...prev, ...newSessions]);
+    appLog("INFO", "Study session(s) added", newSessions);
   };
 
   const updateSession = (id: string, updates: Partial<StudySession>) => {
@@ -545,40 +1075,57 @@ export default function App() {
 
   useEffect(() => {
     let interval: any;
-    if (isActive && timeLeft > 0) {
-      if (Capacitor.isNativePlatform()) {
-        SystemHelper.startForegroundService({
-          title: "Bright Study",
-          text: "타이머 진행...",
-        }).catch(() => {});
+    if (isActive) {
+      // Create backup on start
+      localStorage.setItem(
+        "study_timer_backup",
+        JSON.stringify({
+          isActive: true,
+          timerType,
+          timerMode,
+          timerBookId,
+          timerChapterId,
+          startTimestamp: Date.now(),
+          baseTimeLeft: timeLeft,
+          initialTimeLeft,
+        })
+      );
+
+      if (timerType === "stopwatch") {
+        const startTime = Date.now() - timeLeft * 1000;
+        const activeBook = books.find((b) => b.id === timerBookId);
+        const subjectName = activeBook ? activeBook.title : undefined;
+
+        interval = setInterval(() => {
+          const nextTime = Math.max(
+            0,
+            Math.floor((Date.now() - startTime) / 1000)
+          );
+          setTimeLeft(nextTime);
+        }, 500);
+      } else if (timeLeft > 0) {
+        const endTime = Date.now() + timeLeft * 1000;
+        const activeBook = books.find((b) => b.id === timerBookId);
+        const subjectName = activeBook ? activeBook.title : undefined;
+
+        interval = setInterval(() => {
+          const nextTime = Math.max(
+            0,
+            Math.ceil((endTime - Date.now()) / 1000)
+          );
+          setTimeLeft(nextTime);
+        }, 500);
       }
-      const endTime = Date.now() + timeLeft * 1000;
-      interval = setInterval(() => {
-        const nextTime = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
-        setTimeLeft(nextTime);
-        if (Capacitor.isNativePlatform() && nextTime > 0) {
-          const m = Math.floor(nextTime / 60);
-          const s = nextTime % 60;
-          SystemHelper.updateForegroundService({
-            text: `${m}분 ${s}초 남음`,
-          }).catch(() => {});
-        }
-      }, 500);
     } else {
-      if (Capacitor.isNativePlatform()) {
-        SystemHelper.stopForegroundService().catch(() => {});
-      }
+      localStorage.removeItem("study_timer_backup");
     }
     return () => {
       clearInterval(interval);
-      if (Capacitor.isNativePlatform()) {
-        SystemHelper.stopForegroundService().catch(() => {});
-      }
     };
   }, [isActive]);
 
   useEffect(() => {
-    if (isActive && timeLeft <= 0) {
+    if (isActive && timerType !== "stopwatch" && timeLeft <= 0) {
       setIsActive(false);
       playSystemAlert(timerAlertMode);
 
@@ -600,20 +1147,34 @@ export default function App() {
     timerChapterId,
   ]);
 
-  const stopTimer = () => {
+  const stopTimer = (overrideTimeLeft?: number) => {
     setIsActive(false);
     if (capacitorNotifications) {
       capacitorNotifications.cancelTimerNotification();
     }
+
+    // 포그라운드 서비스를 명시적으로 정지하고 idle 알림으로 전환
+    if (Capacitor.isNativePlatform()) {
+      stopFgTimer().then(() => startIdleNotification(t));
+    }
+
+    const finalTimeLeft =
+      overrideTimeLeft !== undefined ? overrideTimeLeft : timeLeft;
+
     if (timerMode === "focus") {
-      const elapsedSeconds = initialTimeLeft - timeLeft;
+      const elapsedSeconds =
+        timerType === "stopwatch"
+          ? finalTimeLeft
+          : initialTimeLeft - finalTimeLeft;
       if (elapsedSeconds > 0) {
         addStudySession(elapsedSeconds, timerBookId, timerChapterId);
       }
     }
     setTimerMode("focus");
     setTimeLeft(
-      timerType === "beginner"
+      timerType === "stopwatch"
+        ? 0
+        : timerType === "beginner"
         ? 25 * 60
         : expertTime.hours * 3600 + expertTime.minutes * 60 + expertTime.seconds
     );
@@ -739,74 +1300,23 @@ export default function App() {
     if (data.books) setBooks(data.books);
     if (data.sessions) setSessions(data.sessions);
     if (data.alarms) setAlarms(data.alarms);
-    if (data.isDarkMode !== undefined) setIsDarkMode(data.isDarkMode);
     if (data.weeklyPlans) setWeeklyPlans(data.weeklyPlans);
     if (data.monthlyPlans) setMonthlyPlans(data.monthlyPlans);
+    if (data.timetableRecords) setTimetableRecords(data.timetableRecords);
+    if (data.globalWakeTimeRaw !== undefined)
+      setGlobalWakeTimeRaw(data.globalWakeTimeRaw);
+    if (data.globalSleepTimeRaw !== undefined)
+      setGlobalSleepTimeRaw(data.globalSleepTimeRaw);
+    if (data.dailySettingsDict) setDailySettingsDict(data.dailySettingsDict);
+    if (data.dailyLayouts) setDailyLayouts(data.dailyLayouts);
     if (data.dailyGoalMinutes) setDailyGoalMinutes(data.dailyGoalMinutes);
-    if (data.autoGoalDisplayMode)
-      setAutoGoalDisplayMode(data.autoGoalDisplayMode);
     if (data.dDay !== undefined) setDDay(data.dDay);
-    if (data.globalFontSize) setGlobalFontSize(data.globalFontSize);
-    if (data.preventWordWrap !== undefined)
-      setPreventWordWrap(data.preventWordWrap);
-    if (data.showNavLabelsMobile !== undefined)
-      setShowNavLabelsMobile(data.showNavLabelsMobile);
     if (data.dDaySize) setDDaySize(data.dDaySize);
-    if (data.language) setLanguage(data.language);
-    if (data.hideHeroText !== undefined) setHideHeroText(data.hideHeroText);
 
     setLocalDataTimestamp(newTimestamp);
   };
 
-  useEffect(() => {
-    if (!isAllLoaded) {
-      return;
-    }
 
-    if (!autoBackupEnabledRef.current) {
-      autoBackupEnabledRef.current = true;
-      setAutoBackupStatus("자동 백업 준비 완료");
-      return;
-    }
-
-    setAutoBackupStatus("변경 감지됨 · 자동 백업 예약 중");
-
-    if (autoBackupTimerRef.current) {
-      window.clearTimeout(autoBackupTimerRef.current);
-    }
-
-    autoBackupTimerRef.current = window.setTimeout(async () => {
-      try {
-        setAutoBackupStatus("자동 백업 실행 중...");
-        const newTimestamp = Date.now();
-        setLocalDataTimestamp(newTimestamp);
-        const status = await autoSyncDrive(
-          cloudSyncPayload,
-          newTimestamp,
-          onDataSync,
-          syncNetworkPreference
-        );
-        if (status === "skipped_wifi") {
-          setAutoBackupStatus("생략됨 (Wi-Fi 밖)");
-        } else if (status === "skipped_offline") {
-          setAutoBackupStatus("연결 대기 중");
-        } else {
-          const backupTime = new Date().toISOString();
-          setLastAutoBackupAt(backupTime);
-          setAutoBackupStatus("자동 백업 완료");
-        }
-      } catch (error: any) {
-        setAutoBackupStatus(`자동 백업 실패: ${error.message}`);
-      }
-    }, AUTO_CLOUD_BACKUP_DEBOUNCE_MS);
-
-    return () => {
-      if (autoBackupTimerRef.current) {
-        window.clearTimeout(autoBackupTimerRef.current);
-        autoBackupTimerRef.current = null;
-      }
-    };
-  }, [cloudSyncPayload, isAllLoaded]);
 
   useEffect(() => {
     if (!isAllLoaded) return;
@@ -927,9 +1437,20 @@ export default function App() {
 
   return (
     <>
-      {!hasSeenPermissionWizard && Capacitor.isNativePlatform() && (
-        <PermissionWizard onComplete={() => setHasSeenPermissionWizard(true)} />
+      {forceShowPermissionWizard && Capacitor.isNativePlatform() && (
+        <PermissionWizard
+          onComplete={() => {
+            setForceShowPermissionWizard(false);
+            setHasSeenPermissionWizard(true);
+            checkPerms();
+          }}
+        />
       )}
+      {!forceShowPermissionWizard &&
+        hasSeenPermissionWizard &&
+        !hasSeenAlertGuide && (
+          <AlertGuideModal onClose={() => setHasSeenAlertGuide(true)} />
+        )}
       <div
         className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-slate-100 transition-colors"
         onTouchStart={handleTouchStart}
@@ -984,7 +1505,7 @@ export default function App() {
                       <Icon className="w-4 h-4" />
                       <span
                         className={cn(
-                          "uppercase text-[10px] tracking-wider mt-0.5",
+                          "uppercase text-[0.625rem] tracking-wider mt-0.5",
                           showNavLabelsMobile ? "inline" : "hidden md:inline"
                         )}
                       >
@@ -1000,8 +1521,19 @@ export default function App() {
 
         {/* Timer End Modal */}
         {timerEndNotification && (
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 max-w-sm w-full shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
+          <div
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => {
+              if (capacitorNotifications?.stopAlarmSound) {
+                capacitorNotifications.stopAlarmSound();
+              }
+              setTimerEndNotification(null);
+            }}
+          >
+            <div
+              className="bg-white dark:bg-slate-800 rounded-3xl p-8 max-w-sm w-full shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center text-4xl mb-6 shadow-inner">
                 {timerEndNotification === "focus_ended" ? "🎉" : "💪"}
               </div>
@@ -1042,8 +1574,14 @@ export default function App() {
 
         {/* Alarm Trigger Modal */}
         {activeAlarmNotification && (
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 max-w-sm w-full shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
+          <div
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setActiveAlarmNotification(null)}
+          >
+            <div
+              className="bg-white dark:bg-slate-800 rounded-3xl p-8 max-w-sm w-full shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-200"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center text-4xl mb-6 shadow-inner animate-bounce">
                 ⏰
               </div>
@@ -1132,7 +1670,7 @@ export default function App() {
                           <Trash2 className="w-3.5 h-3.5" /> 삭제
                         </button>
                         <div className="flex items-center justify-between px-3 py-2 border-t border-slate-100 dark:border-slate-600">
-                          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                          <span className="text-[0.625rem] font-bold text-slate-500 dark:text-slate-400">
                             크기
                           </span>
                           <div className="flex gap-1">
@@ -1230,7 +1768,7 @@ export default function App() {
                           })()}
                         </span>
                       </div>
-                      <div className="text-[10px] font-bold text-slate-400 mt-1">
+                      <div className="text-[0.625rem] font-bold text-slate-400 mt-1">
                         {dDay.date.replace(/-/g, ".")}
                       </div>
                     </div>
@@ -1269,8 +1807,19 @@ export default function App() {
                   weeklyPlans={weeklyPlans}
                   setWeeklyPlans={setWeeklyPlans}
                   books={activeBooks}
+                  setBooks={setBooks}
                   setActiveTab={setActiveTab}
                   autoGoalDisplayMode={autoGoalDisplayMode}
+                  timetableRecords={timetableRecords}
+                  setTimetableRecords={setTimetableRecords}
+                  globalWakeTimeRaw={globalWakeTimeRaw}
+                  setGlobalWakeTimeRaw={setGlobalWakeTimeRaw}
+                  globalSleepTimeRaw={globalSleepTimeRaw}
+                  setGlobalSleepTimeRaw={setGlobalSleepTimeRaw}
+                  dailySettingsDict={dailySettingsDict}
+                  setDailySettingsDict={setDailySettingsDict}
+                  dailyLayouts={dailyLayouts}
+                  setDailyLayouts={setDailyLayouts}
                 />
               )}
               {activeTab === "books" && (
@@ -1305,9 +1854,20 @@ export default function App() {
                   setWeeklyPlans={setWeeklyPlans}
                   dailyGoalMinutes={dailyGoalMinutes}
                   setDailyGoalMinutes={setDailyGoalMinutes}
-                  books={activeBooks}
+                  books={books}
+                  setBooks={setBooks}
                   setActiveTab={setActiveTab}
                   autoGoalDisplayMode={autoGoalDisplayMode}
+                  timetableRecords={timetableRecords}
+                  setTimetableRecords={setTimetableRecords}
+                  globalWakeTimeRaw={globalWakeTimeRaw}
+                  setGlobalWakeTimeRaw={setGlobalWakeTimeRaw}
+                  globalSleepTimeRaw={globalSleepTimeRaw}
+                  setGlobalSleepTimeRaw={setGlobalSleepTimeRaw}
+                  dailySettingsDict={dailySettingsDict}
+                  setDailySettingsDict={setDailySettingsDict}
+                  dailyLayouts={dailyLayouts}
+                  setDailyLayouts={setDailyLayouts}
                 />
               )}
               {activeTab === "alarms" && (
@@ -1352,8 +1912,12 @@ export default function App() {
 
         <AnimatePresence>
           {showAppExitModal && (
-            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[9999] flex flex-col items-center justify-center p-4">
+            <div
+              className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[9999] flex flex-col items-center justify-center p-4"
+              onClick={() => setShowAppExitModal(false)}
+            >
               <motion.div
+                onClick={(e) => e.stopPropagation()}
                 initial={{ opacity: 0, scale: 0.95, y: 10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 10 }}

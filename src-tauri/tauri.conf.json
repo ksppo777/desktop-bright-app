@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "BrightStudy",
-  "version": "2.2.1601",
+  "version": "2.4.2001",
   "identifier": "com.brightstudy.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -26,7 +26,10 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": [
+      "nsis",
+      "msi"
+    ],
     "createUpdaterArtifacts": true,
     "icon": [
       "icons/icon.ico"

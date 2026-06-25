@@ -65,3 +65,16 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
 
   return [storedValue, setValue, isLoaded] as const;
 }
+
+export function useLockBodyScroll(isLocked: boolean) {
+  useEffect(() => {
+    if (isLocked) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isLocked]);
+}

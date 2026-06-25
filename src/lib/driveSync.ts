@@ -5,7 +5,7 @@ import { Network } from '@capacitor/network';
 
 const FILE_NAME = 'BrightStudyData.json';
 
-const isTauri = () => ('__TAURI_INTERNALS__' in window);
+const isTauri = () => (typeof window !== 'undefined' && ('__TAURI__' in window || '__TAURI_INTERNALS__' in window));
 
 const safeFetch = async (url: string, options?: any) => {
   if (isTauri()) {
@@ -123,6 +123,9 @@ export const syncToDrive = async (appData: any, localTimestamp: number) => {
     
     console.log('syncToDrive: 수동 백업 성공적으로 완료.');
     appLog('SUCCESS', 'syncToDrive completed');
+    try {
+      localStorage.setItem('study-helper-last-sync-remote-timestamp', localTimestamp.toString());
+    } catch (e) {}
   } catch (err: any) {
     console.error('syncToDrive: 내부 에러 발생', err);
     appLog('ERROR', 'syncToDrive fetch error', err.message);
@@ -187,6 +190,9 @@ export const syncFromDrive = async (): Promise<{ data: any, timestamp: number } 
     const data = await res.json();
     console.log('syncFromDrive: 성공적으로 데이터를 가져왔습니다.', { remoteTimestamp: data.timestamp });
     appLog('SUCCESS', 'syncFromDrive completed', { remoteTimestamp: data.timestamp });
+    try {
+      localStorage.setItem('study-helper-last-sync-remote-timestamp', data.timestamp.toString());
+    } catch (e) {}
     return data;
   } catch (err: any) {
     console.error('syncFromDrive: 내부 에러 발생', err);
@@ -222,20 +228,52 @@ export const autoSyncDrive = async (
   try {
      console.log('autoSyncDrive: 클라우드 데이터 가져오는 중...');
      const remote = await syncFromDrive();
-     if (remote && remote.timestamp > localTimestamp) {
-       console.log('autoSyncDrive: 클라우드 데이터가 더 최신입니다. 로컬 데이터 업데이트 중...', { remoteTimestamp: remote.timestamp, localTimestamp });
-       appLog('INFO', 'autoSyncDrive: remote is newer, updating local data');
-       onUpdateLocal(remote.data, remote.timestamp);
-       return "updated_from_remote";
-     } else if (!remote || localTimestamp > (remote?.timestamp || 0)) {
-       console.log('autoSyncDrive: 로컬 데이터가 최신이거나 클라우드에 데이터가 없습니다. 클라우드에 데이터 백업 중...', { remoteTimestamp: remote?.timestamp, localTimestamp });
-       appLog('INFO', 'autoSyncDrive: local is newer or no remote, updating remote data');
-       await syncToDrive(localData, localTimestamp);
-       return "uploaded_to_remote";
+     
+     const lastSyncRemote = parseInt(localStorage.getItem('study-helper-last-sync-remote-timestamp') || '0', 10);
+     console.log('autoSyncDrive: 이전 동기화 시점 확인:', { lastSyncRemote });
+
+     if (remote) {
+       if (remote.timestamp > localTimestamp) {
+         console.log('autoSyncDrive: 클라우드 데이터가 더 최신입니다. 로컬 데이터 업데이트 중...', { remoteTimestamp: remote.timestamp, localTimestamp });
+         appLog('INFO', 'autoSyncDrive: remote is newer, updating local data');
+         onUpdateLocal(remote.data, remote.timestamp);
+         try {
+           localStorage.setItem('study-helper-last-sync-remote-timestamp', remote.timestamp.toString());
+         } catch (e) {}
+         return "updated_from_remote";
+       } else if (localTimestamp > remote.timestamp) {
+         // 양방향 충돌 체크! 
+         // 만약 원격 데이터의 타임스탬프가 마지막으로 동기화한 시각보다 크다면, 
+         // 내가 오프라인인 동안 다른 기기에서 클라우드 데이터를 업데이트했다는 뜻이므로 충돌 발생!
+         if (remote.timestamp > lastSyncRemote) {
+           console.log('autoSyncDrive: 양방향 충돌이 감지되었습니다.', { localTimestamp, remoteTimestamp: remote.timestamp, lastSyncRemote });
+           appLog('WARNING', 'autoSyncDrive: conflict detected');
+           return "conflict_detected";
+         }
+         
+         console.log('autoSyncDrive: 로컬 데이터가 최신입니다. 클라우드 데이터 덮어쓰는 중...', { remoteTimestamp: remote.timestamp, localTimestamp });
+         appLog('INFO', 'autoSyncDrive: local is newer, updating remote data');
+         await syncToDrive(localData, localTimestamp);
+         try {
+           localStorage.setItem('study-helper-last-sync-remote-timestamp', localTimestamp.toString());
+         } catch (e) {}
+         return "uploaded_to_remote";
+       } else {
+         console.log('autoSyncDrive: 동기화 완료 상태 (로컬과 클라우드 데이터 타임스탬프 동일).');
+         appLog('INFO', 'autoSyncDrive: sync is up to date');
+         try {
+           localStorage.setItem('study-helper-last-sync-remote-timestamp', remote.timestamp.toString());
+         } catch (e) {}
+         return "up_to_date";
+       }
      } else {
-       console.log('autoSyncDrive: 동기화 완료 상태 (로컬과 클라우드 데이터 타임스탬프 동일).');
-       appLog('INFO', 'autoSyncDrive: sync is up to date');
-       return "up_to_date";
+       console.log('autoSyncDrive: 클라우드에 데이터가 없습니다. 새로 백업 중...', { localTimestamp });
+       appLog('INFO', 'autoSyncDrive: no remote, creating remote data');
+       await syncToDrive(localData, localTimestamp);
+       try {
+         localStorage.setItem('study-helper-last-sync-remote-timestamp', localTimestamp.toString());
+       } catch (e) {}
+       return "uploaded_to_remote";
      }
   } catch (e: any) {
      console.error('autoSyncDrive: 처리 중 에러 발생', e);

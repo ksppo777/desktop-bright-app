@@ -19,7 +19,7 @@ export const checkAndApplyUpdate = async () => {
 
     // Supabase 데이터베이스에서 최신 버전 정보(1개) 가져오기
     const { data, error } = await supabase
-      .from('app_versions')
+      .from('bright_2_4_20')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(1)
@@ -32,7 +32,7 @@ export const checkAndApplyUpdate = async () => {
     }
 
     // 내 폰에 현재 깔려있는 앱 버전 확인
-    const { value: currentVersion } = await Preferences.get({ key: 'app_version' });
+    const { value: currentVersion } = await Preferences.get({ key: 'bright_2_4_20' });
 
     // 이미 최신 버전이면 여기서 스톱
     if (currentVersion === data.version) {
@@ -49,7 +49,7 @@ export const checkAndApplyUpdate = async () => {
     });
 
     // 다운로드 성공하면 버전을 내 폰에 저장하고 즉시 앱 새로고침(업데이트 적용)
-    await Preferences.set({ key: 'app_version', value: data.version });
+    await Preferences.set({ key: 'bright_2_4_20', value: data.version });
     await CapacitorUpdater.set({ id: bundle.id });
 
   } catch (err) {

@@ -4,17 +4,20 @@ import { App as CapApp } from "@capacitor/app";
 import { SystemHelper } from "../lib/systemHelper";
 
 let capacitorNotifications: any = null;
-import("../lib/capacitor-notifications").then((m) => {
-  capacitorNotifications = m;
-}).catch(() => {});
+import("../lib/capacitor-notifications")
+  .then((m) => {
+    capacitorNotifications = m;
+  })
+  .catch(() => {});
 
 export function usePermissionChecker() {
-  const [permissionsState, setPermissionsState] = useState({ 
-    overlay: true, 
-    exactAlarm: true, 
-    notifications: true 
+  const [permissionsState, setPermissionsState] = useState({
+    overlay: true,
+    exactAlarm: true,
+    notifications: true,
+    batteryOptimization: true,
   });
-  
+
   const [isChecking, setIsChecking] = useState(true);
 
   const checkPerms = async () => {
@@ -22,17 +25,22 @@ export function usePermissionChecker() {
       setIsChecking(false);
       return;
     }
-    
+
     try {
       const sysPerms = await SystemHelper.checkPermissions();
       let notifGranted = true;
-      if (capacitorNotifications && capacitorNotifications.checkNotificationPermission) {
-        notifGranted = await capacitorNotifications.checkNotificationPermission();
+      if (
+        capacitorNotifications &&
+        capacitorNotifications.checkNotificationPermission
+      ) {
+        notifGranted =
+          await capacitorNotifications.checkNotificationPermission();
       }
       setPermissionsState({
         overlay: sysPerms.overlay,
         exactAlarm: sysPerms.exactAlarm,
-        notifications: notifGranted
+        notifications: notifGranted,
+        batteryOptimization: sysPerms.batteryOptimization,
       });
     } catch (e) {
       console.error("Failed to check permissions:", e);
@@ -45,17 +53,17 @@ export function usePermissionChecker() {
     let listener: any;
     if (Capacitor.isNativePlatform()) {
       checkPerms();
-      CapApp.addListener('appStateChange', ({ isActive: appActive }) => {
+      CapApp.addListener("appStateChange", ({ isActive: appActive }) => {
         if (appActive) {
-           checkPerms();
+          checkPerms();
         }
-      }).then(l => listener = l);
+      }).then((l) => (listener = l));
     } else {
       setIsChecking(false);
     }
-    
-    return () => { 
-      if (listener) listener.remove(); 
+
+    return () => {
+      if (listener) listener.remove();
     };
   }, []);
 
@@ -82,12 +90,20 @@ export function usePermissionChecker() {
     } catch (e) {}
   };
 
+  const requestBatteryOptimizationPermission = async () => {
+    try {
+      await SystemHelper.requestBatteryOptimizationPermission();
+      await checkPerms();
+    } catch (e) {}
+  };
+
   return {
     isChecking,
     permissionsState,
     checkPerms,
     requestOverlayPermission,
     requestExactAlarmPermission,
-    requestNotificationPermission
+    requestNotificationPermission,
+    requestBatteryOptimizationPermission,
   };
 }

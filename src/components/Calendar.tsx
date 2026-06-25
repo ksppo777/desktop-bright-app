@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { StudySession, Book } from '../types';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Target, Book as BookIcon, ChevronDown, List, Trash2 } from 'lucide-react';
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays, getWeeksInMonth, isSameWeek } from 'date-fns';
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays, getWeeksInMonth, isSameWeek, parseISO } from 'date-fns';
 import { cn } from '../lib/utils';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'motion/react';
@@ -95,7 +95,7 @@ export default function CalendarWithGoals({ sessions, weeklyPlans, setWeeklyPlan
       const cloneDay = day;
       const dayKeyForCalendar = format(cloneDay, 'yyyy-MM-dd');
       
-      const daySessions = sessions.filter(s => isSameDay(new Date(s.date), cloneDay));
+      const daySessions = sessions.filter(s => isSameDay(parseISO(s.date), cloneDay));
       const totalSeconds = daySessions.reduce((acc, curr) => acc + (curr.durationSeconds || curr.durationMinutes * 60), 0);
       const totalMinutes = Math.floor(totalSeconds / 60);
 

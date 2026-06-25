@@ -4,7 +4,6 @@ const config: CapacitorConfig = {
   appId: 'com.brightstudy.app',
   appName: 'Bright Study',
   webDir: 'dist',                // 💡 여기에 쉼표(,)를 꼭 찍어주세요!
-  bundledWebRuntime: false,
   plugins: {
     CapacitorUpdater: {
       autoUpdate: false, // 자동 업데이트 비활성화 (수동으로 업데이트 체크할 거라서)

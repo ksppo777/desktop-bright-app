@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StudyAlarm, Book } from '../types';
-import { Bell, Plus, Trash2, Settings2, Book as BookIcon } from 'lucide-react';
+import { Bell, Plus, Trash2, Settings2, Book as BookIcon, Info } from 'lucide-react';
 import { cn } from '../lib/utils';
+import AlertGuideModal from './AlertGuideModal';
 
 interface AlarmsProps {
   alarms: StudyAlarm[];
@@ -18,6 +19,7 @@ export default function Alarms({ alarms, setAlarms, books = [] }: AlarmsProps) {
   const [selectedBookId, setSelectedBookId] = useState('');
   const [selectedChapterId, setSelectedChapterId] = useState('');
   const [newAlertMode, setNewAlertMode] = useState<'sound' | 'vibrate' | 'both' | 'off'>('sound');
+  const [showAlertGuide, setShowAlertGuide] = useState(false);
   const days = t('days.short', { returnObjects: true }) as string[];
 
   const addAlarm = () => {
@@ -50,6 +52,7 @@ export default function Alarms({ alarms, setAlarms, books = [] }: AlarmsProps) {
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-8">
+      {showAlertGuide && <AlertGuideModal onClose={() => setShowAlertGuide(false)} />}
       <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700/50">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
@@ -109,24 +112,33 @@ export default function Alarms({ alarms, setAlarms, books = [] }: AlarmsProps) {
             </button>
           </div>
 
-          <div className="flex gap-2 w-full pt-1">
-            {(['sound', 'vibrate', 'both', 'off'] as const).map(m => (
-              <button
-                key={m}
-                onClick={() => setNewAlertMode(m)}
-                className={cn(
-                  "flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all capitalize border",
-                  newAlertMode === m 
-                    ? "bg-indigo-50 border-indigo-200 text-indigo-600 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-400" 
-                    : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700"
-                )}
-              >
-                {m === 'sound' && t('alarms.alertModes.sound')}
-                {m === 'vibrate' && t('alarms.alertModes.vibrate')}
-                {m === 'both' && t('alarms.alertModes.both')}
-                {m === 'off' && t('alarms.alertModes.off')}
-              </button>
-            ))}
+          <div className="flex gap-2 w-full pt-1 items-center">
+            <div className="flex gap-2 flex-1 relative">
+              {(['sound', 'vibrate', 'both', 'off'] as const).map(m => (
+                <button
+                  key={m}
+                  onClick={() => setNewAlertMode(m)}
+                  className={cn(
+                    "flex-1 py-1.5 text-[11px] font-bold rounded-lg transition-all capitalize border",
+                    newAlertMode === m 
+                      ? "bg-indigo-50 border-indigo-200 text-indigo-600 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-400" 
+                      : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700"
+                  )}
+                >
+                  {m === 'sound' && t('alarms.alertModes.sound')}
+                  {m === 'vibrate' && t('alarms.alertModes.vibrate')}
+                  {m === 'both' && t('alarms.alertModes.both')}
+                  {m === 'off' && t('alarms.alertModes.off')}
+                </button>
+              ))}
+            </div>
+            <button 
+              onClick={() => setShowAlertGuide(true)}
+              className="p-1.5 ml-1 text-slate-400 hover:text-indigo-500 transition-colors"
+              title={t('alertGuide.title')}
+            >
+              <Info className="w-5 h-5" />
+            </button>
           </div>
 
           {isExpertMode && (

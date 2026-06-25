@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { Book, Chapter } from '../types';
 import { registerBackHandler } from '../lib/backHandler';
+import { useLockBodyScroll } from '../lib/utils';
+import BaseModal from './BaseModal';
 
 interface QuickAddModalProps {
   isOpen: boolean;
@@ -18,18 +20,15 @@ export default function QuickAddModal({ isOpen, onClose, onAdd, book, chapter }:
   const [endPage, setEndPage] = useState(chapter.endPage);
   const [isFullChapter, setIsFullChapter] = useState(false);
 
+  useLockBodyScroll(isOpen);
+
   useEffect(() => {
     if (isOpen) {
       setStartPage(chapter.startPage);
       setEndPage(chapter.endPage);
       setIsFullChapter(false);
-      
-      return registerBackHandler(() => {
-        onClose();
-        return true;
-      });
     }
-  }, [isOpen, chapter, onClose]);
+  }, [isOpen, chapter]);
 
   if (!isOpen) return null;
 
@@ -47,16 +46,9 @@ export default function QuickAddModal({ isOpen, onClose, onAdd, book, chapter }:
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 dark:bg-slate-900/80 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-2xl w-full max-w-sm border border-slate-100 dark:border-slate-700 animate-in fade-in zoom-in-95 duration-200">
+    <BaseModal isOpen={isOpen} onClose={onClose} className="max-w-sm p-6" zIndex={100}>
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">{t('quickAdd.title')}</h3>
-          <button 
-            onClick={onClose}
-            className="text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 w-8 h-8 rounded-full flex items-center justify-center transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         <div className="space-y-4">
@@ -112,7 +104,6 @@ export default function QuickAddModal({ isOpen, onClose, onAdd, book, chapter }:
             {t('quickAdd.add')}
           </button>
         </div>
-      </div>
-    </div>
+      </BaseModal>
   );
 }

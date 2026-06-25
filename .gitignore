@@ -6,3 +6,17 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Tauri
+src-tauri/target/
+
+# Android
+android/.gradle
+android/build
+android/app/build
+android/capacitor.settings.gradle
+android/local.properties
+android/app/google-services.json
+
+# iOS (if applicable)
+ios/

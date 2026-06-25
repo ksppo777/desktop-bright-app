@@ -1,4 +1,13 @@
 {
+  "calculationBasis": "계산 기준",
+  "basisPage": "도서 페이지",
+  "basisChapter": "챕터 갯수",
+  "chaptersPerDay": "챕터 / 일",
+  "chapterPrefix": "말머리",
+  "prefixNone": "없음",
+  "prefixSequential": "순차 숫자 (1, 2...)",
+  "prefixReverse": "역순 숫자 (N, N-1...)",
+  "prefixCustom": "직접 입력",
   "nav": {
     "home": "홈",
     "plan": "오늘 계획",
@@ -12,6 +21,7 @@
   "common": {
     "save": "저장",
     "cancel": "취소",
+    "confirm": "확인",
     "delete": "삭제",
     "add": "추가",
     "edit": "수정",
@@ -23,8 +33,14 @@
     "second": "초",
     "none": "없음",
     "done": "완료",
-    "close": "닫기"
+    "close": "닫기",
+    "collapse": "접기",
+    "expand": "펼쳐보기",
+    "enabled": "활성화",
+    "disabled": "비활성화"
   },
+  "allAutoGoals": "자동 목표 리스트",
+  "chapterCount": "{{count}}개 챕터",
   "languageSelection": {
     "title": "언어 선택",
     "subtitle": "Select Language / 言語の選択",
@@ -65,7 +81,9 @@
     "quotePlaceholder": "나만의 명언을 입력하세요...",
     "refresh": "새로고침",
     "editPin": "수정(고정)",
-    "goalWithCount": "목표: {{count}}회독"
+    "goalWithCount": "목표: {{count}}회독",
+    "completeGoalConfirmation": "오늘의 도전을 완료할까요?",
+    "undoGoalConfirmation": "도전 완료를 취소할까요?"
     ,
     "studyStatusTitle": "오늘의 학습 현황",
     "settings": "설정",
@@ -225,6 +243,9 @@
   "todayPlan": {
     "title": "오늘의 학습 계획",
     "subtitle": "타임테이블을 설정하고 목표를 기입하세요.",
+    "planAhead": "미리 계획",
+    "planAheadDateLabel": "계획할 날짜 선택",
+    "planAheadWarning": "오늘 날짜는 오늘 계획 탭에서 수정해주세요.",
     "dailyGoalLabel": "하루 목표 공부 시간",
     "hoursLabel": "시간",
     "minutesLabel": "분",
@@ -292,7 +313,11 @@
     "syncStart": "연동 시작",
     "defaultStudyTitle": "기본 학습 (미지정)",
     "focusButton": "집중",
-    "breakButton": "휴식"
+    "breakButton": "휴식",
+    "stopwatchMode": "스톱워치 모드",
+    "stopwatchDescription": "무제한으로 시간을 측정합니다.",
+    "confirmModeSwitchTitle": "모드 변경 확인",
+    "confirmModeSwitchMessage": "현재 측정 중인 학습 시간이 있습니다. 모드를 변경하면 측정된 시간이 기록되고 새 모드로 전환됩니다. 계속하시겠습니까?"
   }
   ,
   "calendar": {
@@ -314,6 +339,7 @@
   }
 
   ,"settings": {
+    "notice": { "title": "공지사항", "desc": "업데이트 내역 및 주요 소식을 확인하세요" },
     "display": { "title": "디스플레이 및 환경설정" },
     "language": { "title": "언어 설정", "desc": "앱에서 사용할 언어를 선택하세요.", "ko": "한국어", "en": "English", "ja": "日本語" },
     "theme": { "title": "화면 테마", "desc": "눈이 편안한 테마로 변경합니다.", "light": "밝은 테마", "dark": "어두운 테마" },
@@ -345,19 +371,54 @@
       "remoteData": "구글 클라우드 백업 (최신 버전)",
       "checking": "확인 중...",
       "networkTitle": "백업/동기화 가능한 네트워크 연결 수단",
-      "network": { "all": "Wi-Fi 및 모바일 데이터 모두", "wifi_only": "Wi-Fi 에서만 (모바일 데이터 절약)" }
+      "network": { "all": "Wi-Fi 및 모바일 데이터 모두", "wifi_only": "Wi-Fi 에서만 (모바일 데이터 절약)" },
+      "snapshotsTitle": "백업 스냅샷",
+      "snapshotsLoading": "데이터 불러오는 중...",
+      "snapshotsEmpty": "저장된 스냅샷이 없습니다.",
+      "snapshotRestore": "복원",
+      "snapshotRestoreConfirm": "선택한 스냅샷으로 데이터를 복원하시겠습니까? 현재 기기의 데이터가 덮어쓰여집니다.",
+      "snapshotRestoreComplete": "스냅샷 복원 완료",
+      "resetData": "초기화 (새로고침)"
     },
 
     "localSave": { "title": "기기에 직접 저장", "desc": "오프라인에서도 안전하게 데이터를 저장해 둡니다.", "saveButton": "수동 저장", "saved": "모든 데이터가 현재 기기에 안전하게 저장되었습니다!", "saveFailed": "수동 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.", "manualSaveError": "수동 저장 실패" },
 
     "advanced": { "title": "고급 및 지원" },
+    "version": { "title": "현재 앱 버전", "desc": "빌드 및 릴리즈 정보" },
     "support": { "title": "고객센터 1:1 문의", "desc": "디스코드 채널을 통해 오류 및 의견 전송", "contact": "문의하기", "modalTitle": "고객센터", "modalDesc": "오류 발견 및 개선 사항 제안 등 문의사항은 아래 커뮤니티로 보내주세요.", "discord": "디스코드 채널로 이동" },
 
-    "devLogs": { "title": "디버그 로그 모드", "desc": "개발자 오류 분석 목적으로 작동기록을 저장합니다.", "enabled": "로그 기록 모드가 켜졌습니다.", "disabled": "로그 기록 모드가 꺼졌습니다.", "confirmDelete": "기록된 로그를 모두 삭제하시겠습니까?", "deleted": "로그가 삭제되었습니다.", "clear": "로그 지우기", "export": "로그 추출 (.json)" },
+    "devLogs": { "title": "디버그 로그 모드", "desc": "개발자 오류 분석 목적으로 작동기록을 저장합니다.", "enabled": "로그 기록 모드가 켜졌습니다.", "disabled": "로그 기록 모드가 꺼졌습니다.", "confirmDelete": "기록된 로그를 모두 삭제하시겠습니까?", "deleted": "로그가 삭제되었습니다.", "clear": "로그 지우기", "export": "로그 전송", "copiedToClipboard": "클립보드에 일부 복사되었습니다" },
 
     "factory": { "title": "앱 데이터 초기화", "desc": "기기에 보관된 앱 관련 데이터를 완전히 비웁니다.", "resetButton": "초기화 설정", "confirmTitle": "정말 삭제하겠습니까?", "confirmDesc": "삭제된 데이터는 복구할 수 없습니다. 클라우드에 백업을 해둔 경우 나중에 복원할 수 있습니다." }
   },
+  "permissions": {
+    "overlay": { "title": "다른 앱 위에 표시", "desc": "앱이 백그라운드에 있을 때나 타이머 종료 시 화면을 즉시 깨우고 진행 상태를 오버레이로 표시하기 위해 필수적인 권한입니다." },
+    "exactAlarm": { "title": "정확한 알람 설정", "desc": "기기가 절전 모드이거나 앱이 꺼져있을 때도 사용자가 설정한 공부 알람과 목표 시간이 단 1초의 오차도 없이 정확히 울리도록 보장합니다." },
+    "battery": { "title": "백그라운드 제한 해제", "desc": "앱이 백그라운드에 있거나 화면이 꺼져 있을 때 시스템이 배터리 최적화를 이유로 타이머를 강제 중단시키는 것을 방지합니다." },
+    "notifications": { "title": "알림 권한", "desc": "스마트폰 상단바에 현재 타이머 진행 상태를 실시간으로 표시하고, 중요한 학습 목표 달성 및 휴식 시간을 놓치지 않게 푸시 알림으로 알려드립니다." },
+    "grantedTitle": "권한 허용됨",
+    "grantedDesc": "기능을 위한 권한이 준비되었습니다.",
+    "btnGranted": "확인 완료",
+    "btnRequest": "권한 허용하기",
+    "footer": "기기 시스템 설정 창에서 버튼을 눌러 권한을 허용해주세요."
+  },
+  "alertGuide": {
+    "title": "알림 설정 이용 가이드",
+    "intro": "타이머 및 알림 설정에서 제공하는 <strong>소리, 진동</strong> 모드는 스마트폰 기기의 <strong>기본 설정(시스템 볼륨 및 진동 모드)을 우선적으로 따릅니다.</strong>",
+    "soundTitle": "🔔 소리만 / 소리+진동",
+    "soundDesc": "기기가 '무음'이나 '진동' 모드일 경우 소리가 울리지 않을 수 있습니다. 미디어 볼륨이 충분히 켜져 있는지 확인해 주세요.",
+    "vibrateTitle": "📳 진동만",
+    "vibrateDesc": "기기가 '무음' 모드이거나, 스마트폰 자체의 '진동 세기'가 0으로 설정되어 있는 경우 진동이 작동하지 않습니다.",
+    "screenTitle": "📱 화면 알림만",
+    "screenDesc": "소리나 진동 없이 화면에만 알림이 표시됩니다. 조용한 독서실 등에서 유용하게 사용할 수 있습니다.",
+    "outro": "본 앱은 사용자의 설정 의도를 존중하여 기기의 무음/진동 모드를 무시하고 강제로 소리나 진동을 발생시키지 않습니다.",
+    "confirm": "확인하고 시작하기"
+  },
   "statistics": {
+    "dailyDetails": "상세",
+    "unknownSession": "기타 학습",
+    "memoLabel": "학습 메모",
+    "noMemo": "기록된 메모가 없습니다.",
     "streakTitle": "🔥 연속 학습일",
     "todayFocus": "⏱️ 오늘 집중한 시간",
     "totalStudy": "📚 누적 학습 시간",
@@ -370,6 +431,29 @@
     "timeWithHours": "{{h}}시간 {{m}}분 {{s}}초",
     "timeNoHours": "{{m}}분 {{s}}초",
     "studyTime": "학습 시간",
+    "3days": "3일",
+    "7days": "7일",
+    "14days": "14일",
+    "30days": "30일",
+    "customRange": "직접 선택",
+    "insightTitleCustom": "선택 기간 분석",
+    "insightTitleN": "최근 {{n}}일 분석",
+    "insightDescAvg": "하루 평균 {{h}}시간 {{m}}분 학습하며 ",
+    "insightDescAvgShort": "하루 평균 {{m}}분 학습하며 ",
+    "insightDescTopSubject": "'{{subject}}' 과목을 가장 집중적으로 공부하셨습니다! 🎯",
+    "insightNoData": "충분한 학습 기록이 쌓이면 맞춤형 학습 피드백이 제공됩니다. 조금만 더 힘내세요! 💪",
+    "continuousLearning": "일 연속 학습 중! 🔥",
+    "customRangeTitle": "선택 기간 학습 추이",
+    "dynamicRangeTitle": "최근 {{n}}일 학습 추이",
+    "goalLabel": "목표 시간",
+    "avgTimeLabel": "평균 {{val}}분",
+    "subjectDistributionCustom": "선택 기간 과목별 공부 분포",
+    "subjectDistributionN": "최근 {{n}}일 과목별 공부 분포",
+    "noData": "데이터가 없습니다.",
+    "hourlyActivity": "시간대별 집중 분포 (All-time)",
+    "lastWeekCompare": "지난주 대비",
+    "timeSame": "변동 없음",
+    "lastMonthCompare": "지난달 대비",
     "weeklyStats": "주간 통계",
     "thisWeekTotal": "이번 주 누적 시간",
     "clickShowWeek": "클릭해서 요일표 보기 →",
@@ -390,5 +474,21 @@
     "todayDateWarning": "오늘 날짜는 오늘 계획 탭에서 수정해주세요.",
     "study": "공부",
     "achieved": "달성"
+  },
+  "notification": {
+    "focusMode": "집중 모드",
+    "breakMode": "휴식 모드",
+    "running": "실행 중",
+    "remaining": "남은 시간",
+    "elapsed": "경과 시간",
+    "paused": "일시정지",
+    "play": "재생",
+    "pause": "일시정지",
+    "stop": "정지",
+    "timerComplete": "타이머 완료!",
+    "focusEnded": "고생했어요! 휴식 시간을 가지세요.",
+    "breakEnded": "휴식 완료! 다시 집중을 시작해볼까요?",
+    "appRunning": "Bright Study가 실행 중입니다",
+    "tapToOpen": "탭하여 앱 열기"
   }
 }

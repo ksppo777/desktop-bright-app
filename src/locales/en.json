@@ -1,4 +1,13 @@
 {
+  "calculationBasis": "Calculation Basis",
+  "basisPage": "Pages",
+  "basisChapter": "Chapters",
+  "chaptersPerDay": "chapters / day",
+  "chapterPrefix": "Prefix",
+  "prefixNone": "None",
+  "prefixSequential": "Sequential (1, 2...)",
+  "prefixReverse": "Reverse (N, N-1...)",
+  "prefixCustom": "Custom",
   "nav": {
     "home": "Home",
     "plan": "Today",
@@ -12,6 +21,7 @@
   "common": {
     "save": "Save",
     "cancel": "Cancel",
+    "confirm": "Confirm",
     "delete": "Delete",
     "add": "Add",
     "edit": "Edit",
@@ -23,8 +33,14 @@
     "second": "s",
     "none": "None",
     "done": "Done",
-    "close": "Close"
+    "close": "Close",
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "enabled": "Enabled",
+    "disabled": "Disabled"
   },
+  "allAutoGoals": "All Auto Goals",
+  "chapterCount": "{{count}} Chapters",
   "languageSelection": {
     "title": "Language Selection",
     "subtitle": "Select Language / 言語の選択",
@@ -65,7 +81,9 @@
     "quotePlaceholder": "Enter your quote...",
     "refresh": "Refresh",
     "editPin": "Edit (Pin)",
-    "goalWithCount": "Goal: {{count}} cycles"
+    "goalWithCount": "Goal: {{count}} cycles",
+    "completeGoalConfirmation": "Complete today's challenge?",
+    "undoGoalConfirmation": "Undo challenge completion?"
     ,
     "studyStatusTitle": "Today's study status",
     "settings": "Settings",
@@ -224,6 +242,9 @@
   "todayPlan": {
     "title": "Today's Study Plan",
     "subtitle": "Set your timetable and add study goals.",
+    "planAhead": "Plan Ahead",
+    "planAheadDateLabel": "Select date to plan",
+    "planAheadWarning": "Plan for today directly from the Today Plan tab.",
     "dailyGoalLabel": "Daily study goal",
     "hoursLabel": "Hours",
     "minutesLabel": "Minutes",
@@ -291,7 +312,11 @@
     "syncStart": "Start sync",
     "defaultStudyTitle": "Basic study (unspecified)",
     "focusButton": "Focus",
-    "breakButton": "Break"
+    "breakButton": "Break",
+    "stopwatchMode": "Stopwatch Mode",
+    "stopwatchDescription": "Measure time without any limits.",
+    "confirmModeSwitchTitle": "Confirm Mode Switch",
+    "confirmModeSwitchMessage": "You have an ongoing study session. Switching modes will save your current focus session and transition to the new mode. Do you want to continue?"
   }
     ,
     "calendar": {
@@ -313,6 +338,7 @@
     }
 
     ,"settings": {
+      "notice": { "title": "Notice", "desc": "Check out the latest updates and news." },
       "display": { "title": "Display & Preferences" },
       "language": { "title": "Language", "desc": "Choose the language to use in the app.", "ko": "Korean", "en": "English", "ja": "日本語" },
       "theme": { "title": "Theme", "desc": "Switch to an eye-friendly theme.", "light": "Light", "dark": "Dark" },
@@ -342,19 +368,54 @@
         "remoteData": "Google Cloud backup (latest)",
         "checking": "Checking...",
         "networkTitle": "Network options for backup/sync",
-        "network": { "all": "Wi-Fi and mobile data", "wifi_only": "Wi-Fi only (save mobile data)" }
+        "network": { "all": "Wi-Fi and mobile data", "wifi_only": "Wi-Fi only (save mobile data)" },
+        "snapshotsTitle": "Backup Snapshots",
+        "snapshotsLoading": "Loading data...",
+        "snapshotsEmpty": "No saved snapshots found.",
+        "snapshotRestore": "Restore",
+        "snapshotRestoreConfirm": "Are you sure you want to restore this snapshot? Current device data will be overwritten.",
+        "snapshotRestoreComplete": "Snapshot restored",
+        "resetData": "Reset Data (Reload)"
       },
 
       "localSave": { "title": "Save to device", "desc": "Keep data safe offline.", "saveButton": "Save manually", "saved": "All data was safely saved to this device!", "saveFailed": "Manual save failed. Please try again later.", "manualSaveError": "Manual save failed" },
 
       "advanced": { "title": "Advanced & Support" },
+      "version": { "title": "Current App Version", "desc": "Build & Release info" },
       "support": { "title": "Support (1:1)", "desc": "Send errors and feedback via our Discord channel", "contact": "Contact", "modalTitle": "Support", "modalDesc": "Send bug reports and suggestions to the community below.", "discord": "Open Discord channel" },
 
-      "devLogs": { "title": "Debug Log Mode", "desc": "Store activity logs for developer error analysis.", "enabled": "Log mode enabled.", "disabled": "Log mode disabled.", "confirmDelete": "Delete all recorded logs?", "deleted": "Logs deleted.", "clear": "Clear logs", "export": "Export logs (.json)" },
+      "devLogs": { "title": "Debug Log Mode", "desc": "Store activity logs for developer error analysis.", "enabled": "Log mode enabled.", "disabled": "Log mode disabled.", "confirmDelete": "Delete all recorded logs?", "deleted": "Logs deleted.", "clear": "Clear logs", "export": "Send logs", "copiedToClipboard": "Partially copied to clipboard" },
 
       "factory": { "title": "Factory Reset", "desc": "Completely clear app data stored on this device.", "resetButton": "Reset settings", "confirmTitle": "Are you sure?", "confirmDesc": "Deleted data cannot be recovered. If you backed up to the cloud you can restore later." }
     },
+    "permissions": {
+      "overlay": { "title": "Display over other apps", "desc": "Required to wake the screen immediately when the timer finishes and show progress overlay." },
+      "exactAlarm": { "title": "Exact alarms", "desc": "Ensures study alarms and timer end precisely on time even when the device is asleep or app is closed." },
+      "battery": { "title": "Disable battery optimization", "desc": "Prevents the system from forcefully stopping your timer in the background due to battery optimization." },
+      "notifications": { "title": "Notifications", "desc": "Shows timer progress in the status bar and sends push notifications for breaks and goal completions." },
+      "grantedTitle": "Permission Granted",
+      "grantedDesc": "Permission is ready.",
+      "btnGranted": "Confirmed",
+      "btnRequest": "Grant Permission",
+      "footer": "Please grant permission in device settings window."
+    },
+    "alertGuide": {
+      "title": "Notification Settings Guide",
+      "intro": "Sound and vibration notifications follow your device's <strong>system settings</strong>.",
+      "soundTitle": "🔔 Sound only / Sound & Vibrate",
+      "soundDesc": "Sound may not play if your device is on 'Silent' or 'Vibrate' mode. Please ensure media volume is up.",
+      "vibrateTitle": "📳 Vibrate only",
+      "vibrateDesc": "Vibration will not work if the device is on 'Silent' mode or vibration intensity is at 0.",
+      "screenTitle": "📱 Screen only",
+      "screenDesc": "Notification will only appear on screen with no sound or vibration. Great for quiet environments.",
+      "outro": "This app respects your device's silent/vibrate modes and will not override them.",
+      "confirm": "Got it, start"
+    },
     "statistics": {
+      "dailyDetails": "Details",
+      "unknownSession": "Other Study",
+      "memoLabel": "Study Memo",
+      "noMemo": "No memo recorded.",
       "streakTitle": "🔥 Streak",
       "todayFocus": "⏱️ Today's Focus",
       "totalStudy": "📚 Total Study Time",
@@ -367,6 +428,29 @@
       "timeWithHours": "{{h}}h {{m}}m {{s}}s",
       "timeNoHours": "{{m}}m {{s}}s",
       "studyTime": "Study Time",
+      "3days": "3 Days",
+      "7days": "7 Days",
+      "14days": "14 Days",
+      "30days": "30 Days",
+      "customRange": "Custom Range",
+      "insightTitleCustom": "Selected Period Analysis",
+      "insightTitleN": "Last {{n}} Days Analysis",
+      "insightDescAvg": "Studying an average of {{h}}h {{m}}m per day, ",
+      "insightDescAvgShort": "Studying an average of {{m}}m per day, ",
+      "insightDescTopSubject": "you focused most on '{{subject}}'! 🎯",
+      "insightNoData": "Personalized study feedback will be provided once enough study records have accumulated. Keep it up! 💪",
+      "continuousLearning": "day streak! 🔥",
+      "customRangeTitle": "Study Trend (Selected Period)",
+      "dynamicRangeTitle": "Study Trend (Last {{n}} Days)",
+      "goalLabel": "Goal Time",
+      "avgTimeLabel": "Avg {{val}}m",
+      "subjectDistributionCustom": "Subject Distribution (Selected Period)",
+      "subjectDistributionN": "Subject Distribution (Last {{n}} Days)",
+      "noData": "No data available.",
+      "hourlyActivity": "Hourly Study Distribution (All-time)",
+      "lastWeekCompare": "Compared to last week",
+      "timeSame": "No change",
+      "lastMonthCompare": "Compared to last month",
       "weeklyStats": "Weekly",
       "thisWeekTotal": "This Week Total",
       "clickShowWeek": "Click to view week →",
@@ -387,5 +471,21 @@
       "todayDateWarning": "Please edit today's date in the Today Plan tab.",
       "study": "study",
       "achieved": "achieved"
+    },
+    "notification": {
+      "focusMode": "Focus Mode",
+      "breakMode": "Break Mode",
+      "running": "Running",
+      "remaining": "Remaining",
+      "elapsed": "Elapsed",
+      "paused": "Paused",
+      "play": "Play",
+      "pause": "Pause",
+      "stop": "Stop",
+      "timerComplete": "Timer Complete!",
+      "focusEnded": "Great work! Take a well-deserved break.",
+      "breakEnded": "Break is over! Ready to focus again?",
+      "appRunning": "Bright Study is running",
+      "tapToOpen": "Tap to open app"
     }
 }

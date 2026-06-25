@@ -6,6 +6,25 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+@keyframes stamp {
+  0% {
+    opacity: 0;
+    transform: scale(3) rotate(20deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(0.9) rotate(-17deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(-15deg);
+  }
+}
+
+.animate-stamp {
+  animation: stamp 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
 @variant dark (&:is(.dark *));
 
 @media (hover: hover) and (pointer: fine) {

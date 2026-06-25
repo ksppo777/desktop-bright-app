@@ -1,11 +1,11 @@
 {
-  "version": "2.2.1602",
-  "notes": "아이콘 변경.",
-  "pub_date": "2026-06-15T00:00:00Z",
+  "version": "2.4.1801",
+  "notes": "update",
+  "pub_date": "2026-06-19T00:00:00Z",
   "platforms": {
     "windows-x86_64": {
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVROHREU2FRQWI0MS9ZdkZTS0d1NzdTU1VHTUdqanJ3YWx5SkZoZXQ3cjhwbEFMZnRDZ2N5ajhmUWh1NVhmLzRuME0xT2RIRWV5QXA5SUhqUmJUcURlQmw3L3dpbnpSRUFjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgxNTA2ODQxCWZpbGU6QnJpZ2h0U3R1ZHlfMi4yLjE2MDFfeDY0LXNldHVwLmV4ZQpJZjdkVmVlRE04UjRVUDdvbHZIL2JPZVR2ZGRySHBWY0lpdkpDVUVmbHE0Q2hjcUZyazRwK0EwZGV0aGNJMjVkcW1wZ215cnh1dmJMQkxYTDBQeUtCQT09Cg==",
-      "url": "https://github.com/ksppo777/desktop-bright-app/releases/download/2.2.1602/BrightStudy_2.2.1601_x64-setup.exe"
+      "url": "https://github.com/ksppo777/desktop-bright-app/releases/download/2.4.1801/BrightStudy_2.4.1801_x64-setup.exe"
     }
   }
 }

@@ -1,5 +1,5 @@
-import { Book, Chapter } from "../types";
-import { useState, useRef, useEffect, FormEvent } from "react";
+import { Book, Chapter, AutoGoal } from "../types";
+import React, { useState, useRef, useEffect, FormEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Plus,
@@ -19,10 +19,53 @@ import {
   LayoutList,
   AlignJustify,
   PanelLeft,
+  Menu,
 } from "lucide-react";
-import { cn, useLocalStorage } from "../lib/utils";
+import { cn, useLocalStorage, useLockBodyScroll } from "../lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { registerBackHandler } from "../lib/backHandler";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { AutoGoalModal } from "./AutoGoalModal";
+
+function SortableBookWrapper({ id, children, className }: { id: string; children: ReactNode; className?: string; key?: string | number }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition: transition || undefined,
+    zIndex: isDragging ? 50 : 1,
+    opacity: isDragging ? 0.8 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className={className}>
+      <div className="flex flex-row relative h-full">
+        <div {...attributes} {...listeners} className="flex flex-col items-center justify-center pl-2 sm:pl-3 pr-2 sm:pr-3 cursor-grab active:cursor-grabbing text-slate-300 dark:text-slate-600 hover:text-slate-500 transition-colors touch-none shrink-0 h-full">
+          <Menu className="w-5 h-5 pointer-events-none" />
+        </div>
+        <div className="flex-1 min-w-0">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface BookManagerProps {
   books: Book[];
@@ -107,6 +150,17 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
     null
   );
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
+  const [deleteConfirmAgId, setDeleteConfirmAgId] = useState<string | null>(
+    null
+  );
+
+  useEffect(() => {
+    const handleGlobalClick = () => {
+      setDeleteConfirmAgId(null);
+    };
+    document.addEventListener("click", handleGlobalClick);
+    return () => document.removeEventListener("click", handleGlobalClick);
+  }, []);
 
   const [newBmPage, setNewBmPage] = useState("");
   const [newBmLabel, setNewBmLabel] = useState("");
@@ -136,7 +190,31 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
   const [agStartDate, setAgStartDate] = useState("");
   const [agEndDate, setAgEndDate] = useState("");
   const [agIterations, setAgIterations] = useState("1");
+  const [agCalculationBasis, setAgCalculationBasis] = useState<"page" | "chapter">("page");
   const [agTargetChapterIds, setAgTargetChapterIds] = useState<string[]>([]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setBooks((prev) => {
+        let items = Array.isArray(prev) ? prev : [];
+        const oldIndex = items.findIndex((item) => item.id === active.id);
+        const newIndex = items.findIndex((item) => item.id === over.id);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  };
 
   const prevBooksCount = useRef(books.length);
   useEffect(() => {
@@ -404,6 +482,19 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
     setEditingChapterId(null);
   };
 
+  const handleUpdateChapterPrefix = (bookId: string, format: 'none' | 'sequential' | 'reverse' | 'custom', customPrefix?: string) => {
+    setBooks(prev => prev.map(book => {
+      if (book.id === bookId) {
+        return {
+          ...book,
+          chapterPrefixFormat: format,
+          chapterCustomPrefix: customPrefix !== undefined ? customPrefix : book.chapterCustomPrefix
+        };
+      }
+      return book;
+    }));
+  };
+
   const handleSaveEditBookmark = (
     bookId: string,
     bmId: string,
@@ -508,20 +599,24 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
       prev.map((book) => {
         if (book.id !== bookId) return book;
 
-        let totalPages = 0;
-        if (book.chapters && book.chapters.length > 0) {
-          book.chapters.forEach((c) => {
-            if (agTargetChapterIds.includes(c.id)) {
-              totalPages += c.endPage - c.startPage + 1;
-            }
-          });
+        let totalAmount = 0;
+        if (agCalculationBasis === "chapter") {
+          totalAmount = agTargetChapterIds.length;
+        } else {
+          if (book.chapters && book.chapters.length > 0) {
+            book.chapters.forEach((c) => {
+              if (agTargetChapterIds.includes(c.id)) {
+                totalAmount += c.endPage - c.startPage + 1;
+              }
+            });
+          }
         }
 
-        const totalTargetPages = totalPages * iterations;
+        const totalTargetPages = totalAmount * iterations;
         const dailyPages =
           diffDays > 0 ? Math.ceil(totalTargetPages / diffDays) : 0;
 
-        const newGoal = {
+        const newGoal: AutoGoal = {
           id:
             editingAg?.goalId !== "NEW"
               ? editingAg!.goalId
@@ -537,6 +632,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
           targetChapterIds: agTargetChapterIds,
           dailyPages,
           totalTargetPages,
+          calculationBasis: agCalculationBasis,
         };
 
         const existingGoals = book.autoGoals || [];
@@ -561,13 +657,11 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
   };
 
   const handleDeleteAutoGoal = (bookId: string, goalId: string) => {
-    let proceed = true;
-    try {
-      proceed = window.confirm(t("bookManager.confirm.deleteAutoGoal"));
-    } catch (e) {
-      proceed = true;
+    if (deleteConfirmAgId !== goalId) {
+      setDeleteConfirmAgId(goalId);
+      return;
     }
-    if (!proceed) return;
+
     setBooks((prev) =>
       prev.map((book) => {
         if (book.id !== bookId) return book;
@@ -577,6 +671,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
         };
       })
     );
+    setDeleteConfirmAgId(null);
   };
 
   const handleToggleAutoGoal = (bookId: string, goalId: string) => {
@@ -605,6 +700,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
         setAgStartDate(g.startDate);
         setAgEndDate(g.endDate);
         setAgIterations(String(g.iterations));
+        setAgCalculationBasis(g.calculationBasis || "page");
         setAgTargetChapterIds(
           g.targetChapterIds || book.chapters?.map((c) => c.id) || []
         );
@@ -614,6 +710,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
       setAgStartDate(todayString);
       setAgEndDate("");
       setAgIterations("1");
+      setAgCalculationBasis("page");
       setAgTargetChapterIds(book.chapters?.map((c) => c.id) || []);
     }
   };
@@ -637,6 +734,8 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
   const validBooks = books.filter((b) => !b.isTrash);
   const trashedBooks = books.filter((b) => b.isTrash);
   const [showTrashModal, setShowTrashModal] = useState(false);
+
+  useLockBodyScroll(showTrashModal);
 
   useEffect(() => {
     if (showTrashModal) {
@@ -843,7 +942,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
               ? "grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-[200px_1fr] lg:grid-cols-[240px_1fr] items-stretch"
               : "grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-[64px_1fr] items-stretch"
             : layout === "grid"
-            ? "columns-2 gap-3 sm:gap-4 md:gap-6"
+            ? "grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 md:gap-6 items-start"
             : "grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1024px)] justify-center"
         )}
       >
@@ -949,38 +1048,40 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
           </div>
         )}
 
-        <div
-          className={cn(
-            layout === "sidebar" ? "flex flex-col gap-6" : "contents"
-          )}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
         >
-          {(layout === "sidebar" && validBooks.length > 0
-            ? validBooks.filter(
-                (book) => book.id === (expandedBookId || validBooks[0].id)
-              )
-            : validBooks
-          ).map((book) => {
-            const progress = getBookProgress(book);
-            const theme =
-              THEME_COLORS.find((t) => t.id === book.themeColor) ||
-              THEME_COLORS[0];
-            const isExpanded =
-              layout === "sidebar" ? true : expandedBookId === book.id;
+          <SortableContext items={validBooks.map((b) => b.id)} strategy={rectSortingStrategy}>
+            <div
+              className={cn(
+                layout === "sidebar" ? "flex flex-col gap-6" : "contents"
+              )}
+            >
+              {(layout === "sidebar" && validBooks.length > 0
+                ? validBooks.filter(
+                    (book) => book.id === (expandedBookId || validBooks[0].id)
+                  )
+                : validBooks
+              ).map((book) => {
+                const progress = getBookProgress(book);
+                const theme =
+                  THEME_COLORS.find((t) => t.id === book.themeColor) ||
+                  THEME_COLORS[0];
+                const isExpanded =
+                  layout === "sidebar" ? true : expandedBookId === book.id;
 
-            return (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-                key={book.id}
-                className={cn(
-                  "bg-white dark:bg-slate-800/80 rounded-3xl shadow-xl shadow-blue-900/5 dark:shadow-none border border-blue-50 dark:border-slate-700/50 overflow-hidden flex flex-col",
-                  layout === "sidebar" ? "h-full" : "",
-                  layout === "grid"
-                    ? "break-inside-avoid mb-3 sm:mb-4 md:mb-6"
-                    : ""
-                )}
-              >
+                return (
+                  <SortableBookWrapper
+                    key={book.id}
+                    id={book.id}
+                    className={cn(
+                      "bg-white dark:bg-slate-800/80 rounded-3xl shadow-xl shadow-blue-900/5 dark:shadow-none border border-blue-50 dark:border-slate-700/50 overflow-hidden flex flex-col w-full",
+                      layout === "sidebar" ? "h-full" : "",
+                      layout === "grid" ? "h-full" : ""
+                    )}
+                  >
                 <div
                   className={cn(
                     layout === "compact" || layout === "grid"
@@ -992,9 +1093,11 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                     className={cn(
                       "flex justify-between gap-4",
                       layout === "grid"
-                        ? "flex-col mb-4"
-                        : "flex-col sm:flex-row sm:items-center mb-6",
-                      layout === "compact" && "mb-3"
+                        ? "flex-col"
+                        : "flex-col sm:flex-row sm:items-center",
+                      isExpanded 
+                        ? (layout === "grid" ? "mb-4" : layout === "compact" ? "mb-3" : "mb-6")
+                        : "mb-0"
                     )}
                   >
                     <div className="flex flex-col gap-1 flex-1 min-w-0">
@@ -1178,17 +1281,41 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
 
                         {detailTab === "chapters" && (
                           <div>
-                            <div className="flex justify-between items-center mb-4">
-                              <h4 className="font-bold text-blue-900 dark:text-slate-200 text-sm">
+                            <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center mb-4 gap-2">
+                              <h4 className="font-bold text-blue-900 dark:text-slate-200 text-sm hidden sm:block">
                                 {t("bookManager.chaptersProgress")}
                               </h4>
-                              <button
-                                onClick={() => setIsAddingChapterId(book.id)}
-                                className="text-xs font-bold text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center gap-1 uppercase tracking-wider bg-blue-50 dark:bg-slate-700 px-3 py-1.5 rounded-lg"
-                              >
-                                <Plus className="w-3.5 h-3.5" />{" "}
-                                {t("chapterModal.add")}
-                              </button>
+                              <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1 bg-blue-50 dark:bg-slate-800 px-2 py-1.5 rounded-lg border border-blue-100 dark:border-slate-700 text-xs">
+                                  <span className="font-bold text-blue-800 dark:text-slate-300 mr-1">{t("chapterPrefix") || "말머리"}</span>
+                                  <select 
+                                    className="bg-transparent font-medium text-slate-700 dark:text-slate-300 outline-none"
+                                    value={book.chapterPrefixFormat || 'none'}
+                                    onChange={(e) => handleUpdateChapterPrefix(book.id, e.target.value as any, book.chapterCustomPrefix)}
+                                  >
+                                    <option value="none">{t("prefixNone") || "없음"}</option>
+                                    <option value="sequential">{t("prefixSequential") || "순차 숫자 (1, 2...)"}</option>
+                                    <option value="reverse">{t("prefixReverse") || "역순 숫자 (N, N-1...)"}</option>
+                                    <option value="custom">{t("prefixCustom") || "직접 입력"}</option>
+                                  </select>
+                                  {book.chapterPrefixFormat === 'custom' && (
+                                    <input 
+                                      type="text" 
+                                      value={book.chapterCustomPrefix || ''}
+                                      onChange={(e) => handleUpdateChapterPrefix(book.id, 'custom', e.target.value)}
+                                      placeholder="Prefix..."
+                                      className="ml-1 w-20 px-1.5 py-0.5 text-xs bg-white dark:bg-slate-900 border border-blue-200 dark:border-slate-600 rounded"
+                                    />
+                                  )}
+                                </div>
+                                <button
+                                  onClick={() => setIsAddingChapterId(book.id)}
+                                  className="text-xs font-bold text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center gap-1 uppercase tracking-wider bg-blue-50 dark:bg-slate-700 px-3 py-1.5 rounded-lg"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />{" "}
+                                  {t("chapterModal.add")}
+                                </button>
+                              </div>
                             </div>
 
                             {isAddingChapterId === book.id && (
@@ -1274,7 +1401,17 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                                     "space-y-2"
                                 )}
                               >
-                                {book.chapters.map((chapter) => (
+                                {book.chapters.map((chapter, idx) => {
+                                  let prefixedTitle = chapter.title;
+                                  if (book.chapterPrefixFormat === 'sequential') {
+                                    prefixedTitle = `${idx + 1}. ${chapter.title}`;
+                                  } else if (book.chapterPrefixFormat === 'reverse') {
+                                    prefixedTitle = `${book.chapters.length - idx}. ${chapter.title}`;
+                                  } else if (book.chapterPrefixFormat === 'custom' && book.chapterCustomPrefix) {
+                                    prefixedTitle = `${book.chapterCustomPrefix} ${chapter.title}`;
+                                  }
+                                  
+                                  return (
                                   <li
                                     key={chapter.id}
                                     className={cn(
@@ -1440,7 +1577,7 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                                                   : "text-blue-900 dark:text-slate-200"
                                               )}
                                             >
-                                              {chapter.title}
+                                              {prefixedTitle}
                                             </span>
                                             <span
                                               className={cn(
@@ -1539,7 +1676,8 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                                       </>
                                     )}
                                   </li>
-                                ))}
+                                  );
+                                })}
                               </ul>
                             )}
                           </div>
@@ -1965,146 +2103,9 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                               </button>
                             </div>
 
-                            {editingAg?.bookId === book.id && (
-                              <div className="bg-blue-50/50 dark:bg-slate-800/50 p-5 rounded-2xl mb-4 border border-blue-100 dark:border-slate-700 flex flex-col gap-4">
-                                <div>
-                                  <label className="text-[10px] font-bold text-blue-400 uppercase mb-1.5 block">
-                                    {t("bookManager.challengeBook")}
-                                  </label>
-                                  <div className="w-full px-4 py-2.5 bg-white/50 dark:bg-slate-900/50 border border-blue-200/50 dark:border-slate-600/50 rounded-xl text-sm font-bold text-blue-900/70 dark:text-slate-400">
-                                    {book.title}
-                                  </div>
-                                </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                  <div>
-                                    <label className="text-[10px] font-bold text-blue-400 uppercase mb-1.5 block">
-                                      {t("bookManager.challengeStartDate")}
-                                    </label>
-                                    <input
-                                      type="date"
-                                      value={agStartDate}
-                                      onChange={(e) =>
-                                        setAgStartDate(e.target.value)
-                                      }
-                                      className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-blue-200 dark:border-slate-600 rounded-xl text-sm font-bold text-blue-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="text-[10px] font-bold text-blue-400 uppercase mb-1.5 block">
-                                      {t("bookManager.challengeEndDate")}
-                                    </label>
-                                    <input
-                                      type="date"
-                                      value={agEndDate}
-                                      onChange={(e) =>
-                                        setAgEndDate(e.target.value)
-                                      }
-                                      className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-blue-200 dark:border-slate-600 rounded-xl text-sm font-bold text-blue-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-                                    />
-                                  </div>
-                                </div>
-                                <div>
-                                  <label className="text-[10px] font-bold text-blue-400 uppercase mb-1.5 block">
-                                    {t("bookManager.targetIterations")}
-                                  </label>
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    value={agIterations}
-                                    onChange={(e) =>
-                                      setAgIterations(e.target.value)
-                                    }
-                                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-blue-200 dark:border-slate-600 rounded-xl text-sm font-bold text-blue-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-400"
-                                  />
-                                </div>
-                                {book.chapters && book.chapters.length > 0 && (
-                                  <div>
-                                    <label className="text-[10px] font-bold text-blue-400 uppercase mb-1 flex justify-between items-center">
-                                      <span>
-                                        {t("bookManager.challengeChapters", {
-                                          count: agTargetChapterIds.length,
-                                        })}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          setAgTargetChapterIds(
-                                            agTargetChapterIds.length === 0
-                                              ? book.chapters!.map((c) => c.id)
-                                              : []
-                                          )
-                                        }
-                                        className="text-blue-500 hover:underline"
-                                      >
-                                        {agTargetChapterIds.length === 0
-                                          ? t("bookManager.selectAll")
-                                          : t("bookManager.deselectAll")}
-                                      </button>
-                                    </label>
-                                    <div className="max-h-40 overflow-y-auto space-y-1 bg-white/50 dark:bg-slate-900/50 p-2 rounded-xl border border-blue-200/50 dark:border-slate-600/50">
-                                      {book.chapters.map((ch) => {
-                                        const isChecked =
-                                          agTargetChapterIds.includes(ch.id);
-                                        return (
-                                          <label
-                                            key={ch.id}
-                                            className="flex items-center gap-2 p-1.5 hover:bg-white dark:hover:bg-slate-800 rounded-lg cursor-pointer"
-                                          >
-                                            <input
-                                              type="checkbox"
-                                              checked={isChecked}
-                                              onChange={(e) => {
-                                                if (e.target.checked) {
-                                                  setAgTargetChapterIds([
-                                                    ...agTargetChapterIds,
-                                                    ch.id,
-                                                  ]);
-                                                } else {
-                                                  setAgTargetChapterIds(
-                                                    agTargetChapterIds.filter(
-                                                      (id) => id !== ch.id
-                                                    )
-                                                  );
-                                                }
-                                              }}
-                                              className="w-4 h-4 text-blue-600 bg-white border-slate-300 rounded focus:ring-blue-500"
-                                            />
-                                            <span className="text-sm font-bold text-slate-700 dark:text-slate-300 truncate flex-1">
-                                              {ch.title}
-                                            </span>
-                                            <span className="text-xs font-medium text-slate-400">
-                                              {ch.endPage - ch.startPage + 1}p
-                                            </span>
-                                          </label>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-                                <div className="flex gap-2 justify-end mt-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleSaveAutoGoal(book.id)}
-                                    className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors shadow-md shadow-blue-200 dark:shadow-none"
-                                  >
-                                    {t("common.save")}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditingAg(null)}
-                                    className="text-blue-500 font-bold px-3 py-2.5 text-sm hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
-                                  >
-                                    {t("common.cancel")}
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-
                             {book.autoGoals && book.autoGoals.length > 0 ? (
                               <div className="flex flex-col gap-3">
-                                {book.autoGoals.map((ag) =>
-                                  editingAg?.bookId !== book.id ||
-                                  editingAg?.goalId !== ag.id ? (
+                                {book.autoGoals.map((ag) => (
                                     <div
                                       key={ag.id}
                                       className="bg-white dark:bg-slate-800 border border-blue-100 dark:border-slate-700 rounded-xl p-4 shadow-sm flex flex-col gap-3"
@@ -2165,15 +2166,21 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                                             {t("common.edit")}
                                           </button>
                                           <button
-                                            onClick={() =>
+                                            onClick={(e) => {
+                                              e.stopPropagation();
                                               handleDeleteAutoGoal(
                                                 book.id,
                                                 ag.id
-                                              )
-                                            }
-                                            className="text-xs font-bold text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 bg-red-50 dark:bg-red-900/20 px-3 py-1.5 rounded-lg transition-colors"
+                                              );
+                                            }}
+                                            className={cn(
+                                              "text-xs font-bold px-3 py-1.5 rounded-lg transition-colors",
+                                              deleteConfirmAgId === ag.id
+                                                ? "bg-red-500 text-white hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700"
+                                                : "text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 bg-red-50 dark:bg-red-900/20"
+                                            )}
                                           >
-                                            {t("common.delete")}
+                                            {deleteConfirmAgId === ag.id ? t("common.confirmDelete", { defaultValue: "삭제 확인" }) : t("common.delete", { defaultValue: "삭제" })}
                                           </button>
                                         </div>
                                       </div>
@@ -2208,12 +2215,15 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                                             {t("bookManager.dailyTargetVolume")}
                                           </span>
                                           <span className="font-black text-blue-600 dark:text-blue-400 text-xl">
-                                            {ag.dailyPages}p
+                                            {ag.dailyPages}
+                                            <span className="text-sm font-bold ml-1">
+                                              {ag.calculationBasis === "chapter" ? (t("chaptersPerDay") || "챕터 / 일") : "p / 일"}
+                                            </span>
                                           </span>
                                         </div>
                                       </div>
                                     </div>
-                                  ) : null
+                                  )
                                 )}
                               </div>
                             ) : (
@@ -2259,15 +2269,23 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
                     )}
                   </AnimatePresence>
                 </div>
-              </motion.div>
-            );
-          })}
-        </div>
+                  </SortableBookWrapper>
+                );
+              })}
+            </div>
+          </SortableContext>
+        </DndContext>
       </motion.div>
 
       {showTrashModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col">
+        <div 
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setShowTrashModal(false)}
+        >
+          <div 
+            className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
             <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
               <h3 className="text-xl font-bold flex items-center gap-2 text-slate-800 dark:text-slate-100">
                 <Trash2 className="w-6 h-6 text-slate-400" />
@@ -2378,6 +2396,16 @@ export default function BookManager({ books, setBooks }: BookManagerProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {editingAg && (
+        <AutoGoalModal
+          isOpen={true}
+          onClose={() => setEditingAg(null)}
+          book={books.find((b) => b.id === editingAg.bookId)!}
+          goalId={editingAg.goalId}
+          setBooks={setBooks}
+        />
       )}
     </div>
   );

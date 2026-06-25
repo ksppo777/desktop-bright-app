@@ -23,20 +23,10 @@ const STORAGE_KEY_EXPIRY = 'app_google_token_expiry';
 try {
   const token = localStorage.getItem(STORAGE_KEY_TOKEN);
   const userStr = localStorage.getItem(STORAGE_KEY_USER);
-  const expiryStr = localStorage.getItem(STORAGE_KEY_EXPIRY);
-  if (token && expiryStr) { // userStr might be missing initially after Tauri redirect
-    const expiry = parseInt(expiryStr, 10);
-    // 세션 만료 검증 (현재 시간이 만료 시간보다 이전인지)
-    if (Date.now() < expiry) {
-      cachedAccessToken = token;
-      if (userStr) {
-        cachedUser = JSON.parse(userStr);
-      }
-    } else {
-      // 세션 만료 시 로컬 저장소 초기화하여 재로그인 요구
-      localStorage.removeItem(STORAGE_KEY_TOKEN);
-      localStorage.removeItem(STORAGE_KEY_USER);
-      localStorage.removeItem(STORAGE_KEY_EXPIRY);
+  if (token) {
+    cachedAccessToken = token;
+    if (userStr) {
+      cachedUser = JSON.parse(userStr);
     }
   }
 } catch (e) {
@@ -46,7 +36,56 @@ try {
 // Replace with the user's Web Client ID later
 const WEB_CLIENT_ID = '926621621039-b6idpq9gvm3h1gn5ltb2p609pf401aaf.apps.googleusercontent.com';
 
-const isTauri = () => ('__TAURI_INTERNALS__' in window);
+const isTauri = () => (typeof window !== 'undefined' && ('__TAURI__' in window || '__TAURI_INTERNALS__' in window));
+
+supabase.auth.onAuthStateChange((event, session) => {
+  if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
+    let providerToken = session.provider_token;
+    
+    // Fallback: Check if captured early
+    if (!providerToken && typeof window !== 'undefined') {
+       try {
+         const earlyToken = localStorage.getItem('app_google_token');
+         if (earlyToken) {
+           providerToken = earlyToken;
+         }
+       } catch(e) {}
+    }
+    
+    // Fallback 2: Parse from URL if still missing
+    if (!providerToken && typeof window !== 'undefined') {
+       const hashStr = window.location.hash.substring(1);
+       if (hashStr.includes('provider_token=')) {
+          const params = new URLSearchParams(hashStr);
+          providerToken = params.get('provider_token') || undefined;
+       }
+    }
+
+    if (providerToken) {
+      cachedAccessToken = providerToken;
+      try {
+        localStorage.setItem(STORAGE_KEY_TOKEN, cachedAccessToken);
+        localStorage.setItem(STORAGE_KEY_EXPIRY, (Date.now() + 3500 * 1000).toString());
+      } catch(e) {}
+    }
+    
+    const meta = session.user?.user_metadata;
+    if (meta) {
+      cachedUser = {
+        displayName: meta.full_name || meta.name || null,
+        email: session.user?.email || null,
+        photoURL: meta.avatar_url || meta.picture || null
+      };
+      try {
+        localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(cachedUser));
+      } catch(e) {}
+    }
+
+    if (cachedAccessToken && cachedUser && onAuthSuccessCallback) {
+      onAuthSuccessCallback(cachedUser, cachedAccessToken);
+    }
+  }
+});
 
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
@@ -58,60 +97,64 @@ export const initAuth = (
   const performSilentLogin = async () => {
     // 1. URL 해시 혹은 Supabase Session을 통해 데스크톱(Tauri) 환경에서 리턴된 토큰 추출
     if (isTauri()) {
-      const hash = window.location.hash;
-      if (hash.includes('provider_token=')) {
-        try {
-          const params = new URLSearchParams(hash.substring(1));
-          const providerToken = params.get('provider_token'); // 이건 구글 드라이브 API 호출용
-          
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (data?.session) {
+          const providerToken = data.session.provider_token;
           if (providerToken) {
             cachedAccessToken = providerToken;
             localStorage.setItem(STORAGE_KEY_TOKEN, cachedAccessToken);
             localStorage.setItem(STORAGE_KEY_EXPIRY, (Date.now() + 3500 * 1000).toString());
-            
-            // 해시값은 지워서 깔끔하게 만들기
-            window.history.replaceState({}, document.title, window.location.pathname);
-            
-            // Supabase 세션에서 유저 정보 가져오기
-            const { data } = await supabase.auth.getSession();
-            if (data?.session?.user) {
-              const meta = data.session.user.user_metadata;
-              cachedUser = {
-                displayName: meta.full_name || meta.name || null,
-                email: data.session.user.email || null,
-                photoURL: meta.avatar_url || meta.picture || null
-              };
-              localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(cachedUser));
-              
-              if (onAuthSuccessCallback) onAuthSuccessCallback(cachedUser, cachedAccessToken);
-              return;
-            } else {
-               // Fallback
-               const user = await fetchUserInfoFromWeb(cachedAccessToken);
-               cachedUser = user;
-               localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
-               if (onAuthSuccessCallback) onAuthSuccessCallback(cachedUser, cachedAccessToken);
-               return;
-            }
           }
-        } catch(e) {
-          console.error("Failed to parse Tauri Supabase OAuth info:", e);
+          
+          const meta = data.session.user?.user_metadata;
+          if (meta) {
+            cachedUser = {
+              displayName: meta.full_name || meta.name || null,
+              email: data.session.user?.email || null,
+              photoURL: meta.avatar_url || meta.picture || null
+            };
+            localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(cachedUser));
+          }
         }
+      } catch(e) {
+        console.error("Failed to parse Tauri Supabase session info:", e);
       }
     }
 
-    if (cachedAccessToken && cachedUser) {
-      // We already have a valid token from local storage
+    const expiryStr = localStorage.getItem(STORAGE_KEY_EXPIRY);
+    const isExpired = expiryStr ? (Date.now() >= parseInt(expiryStr, 10)) : true;
+
+    if (cachedAccessToken && cachedUser && !isExpired) {
+      // We already have a valid token from local storage and it's not expired
       if (onAuthSuccessCallback) onAuthSuccessCallback(cachedUser, cachedAccessToken);
       return;
     }
+
+    // Attempt silent sign-in to refresh or recover the token
     try {
       if (Capacitor.isNativePlatform()) {
         try {
-           await GoogleSignIn.initialize({
+          await GoogleSignIn.initialize({
             clientId: WEB_CLIENT_ID,
             scopes: ['profile', 'email', DRIVE_APP_DATA_SCOPE],
           });
+          
+          console.log('auth.ts: Native Google Sign-In Silent 복구 시도...');
+          const result = await GoogleSignIn.signIn(); // 기존 세션을 바탕으로 자동 로그인 시도
+          if (result && result.accessToken) {
+            cachedAccessToken = result.accessToken;
+            cachedUser = {
+              displayName: result.displayName || `${result.givenName || ''} ${result.familyName || ''}`.trim(),
+              email: result.email || null,
+              photoURL: result.imageUrl || null,
+            };
+            localStorage.setItem(STORAGE_KEY_TOKEN, cachedAccessToken);
+            localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(cachedUser));
+            localStorage.setItem(STORAGE_KEY_EXPIRY, (Date.now() + 3500 * 1000).toString());
+            if (onAuthSuccessCallback) onAuthSuccessCallback(cachedUser, cachedAccessToken);
+            return;
+          }
         } catch (e) {
           console.log('Silent login failed for native', e);
         }
@@ -121,7 +164,19 @@ export const initAuth = (
     } catch (err) {
       console.log('Init auth error:', err);
     }
-    if (onAuthFailure) onAuthFailure();
+
+    // 만약 자동 로그인 실패했고 기존 토큰이 이미 만료된 경우 최종 로그아웃 처리
+    if (isExpired && cachedAccessToken) {
+      console.log('auth.ts: Silent 로그인 실패 및 세션 만료로 로그아웃 처리');
+      await logout();
+    } else if (cachedAccessToken && cachedUser && isExpired) {
+      // 1시간이 지났으나 로그인 시도가 오프라인 등으로 임시 실패한 경우, 
+      // 일단 기존 토큰을 그대로 유지하여 오프라인에서 앱은 쓸 수 있게 하고, 
+      // API 통신 시 401이 나면 그때 다시 로그아웃을 시도하도록 임시 패스함.
+      if (onAuthSuccessCallback) onAuthSuccessCallback(cachedUser, cachedAccessToken);
+    } else {
+      if (onAuthFailureCallback) onAuthFailureCallback();
+    }
   };
 
   performSilentLogin();
@@ -176,6 +231,9 @@ export const googleSignIn = async (): Promise<{ user: User, accessToken: string 
         options: {
           scopes: `profile email ${DRIVE_APP_DATA_SCOPE}`,
           redirectTo: redirectUri,
+          queryParams: {
+            prompt: 'select_account',
+          }
         }
       });
       if (error) {
@@ -227,7 +285,7 @@ export const googleSignIn = async (): Promise<{ user: User, accessToken: string 
         });
       }
       
-      googleTokenClient.requestAccessToken();
+      googleTokenClient.requestAccessToken({ prompt: 'select_account' });
     });
   }
 };

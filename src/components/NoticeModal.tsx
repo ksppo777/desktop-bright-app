@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, ChevronRight, Bell, FileText, ArrowLeft } from "lucide-react";
+import { ChevronRight, Bell, FileText, ArrowLeft, X } from "lucide-react";
 import { NOTICES, Notice } from "../data/notices";
 import { cn } from "../lib/utils";
-import { registerBackHandler } from "../lib/backHandler";
+import BaseModal from "./BaseModal";
 
 interface NoticeModalProps {
   onClose: () => void;
@@ -12,31 +12,22 @@ interface NoticeModalProps {
 export default function NoticeModal({ onClose }: NoticeModalProps) {
   const [selectedNotice, setSelectedNotice] = useState<Notice | null>(null);
 
-  useEffect(() => {
-    return registerBackHandler(() => {
-      if (selectedNotice) {
-        setSelectedNotice(null);
-        return true; // We handled it
-      }
-      onClose();
-      return true; // We handled it
-    });
-  }, [selectedNotice, onClose]);
-
   const sortedNotices = [...NOTICES].sort((a, b) => {
     if (a.pinned && !b.pinned) return -1;
     if (!a.pinned && b.pinned) return 1;
     return b.date.localeCompare(a.date);
   });
 
+  const handleBack = () => {
+    if (selectedNotice) {
+      setSelectedNotice(null);
+    } else {
+      onClose();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[9999] flex flex-col items-center justify-center p-4">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 10 }}
-        className="w-full max-w-md bg-white dark:bg-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden h-[80vh] max-h-[700px]"
-      >
+    <BaseModal isOpen={true} onClose={onClose} onBack={handleBack} className="max-w-md w-full h-[80vh] max-h-[700px] flex flex-col p-0 overflow-hidden" zIndex={9999} hideCloseButton={true}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/80">
           <div className="flex items-center gap-3">
@@ -141,7 +132,6 @@ export default function NoticeModal({ onClose }: NoticeModalProps) {
             )}
           </AnimatePresence>
         </div>
-      </motion.div>
-    </div>
+    </BaseModal>
   );
 }

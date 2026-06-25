@@ -33,11 +33,15 @@ import {
   Info,
 } from "lucide-react";
 import { clearStorage, setStorage } from "../lib/storage";
-import { cn } from "../lib/utils";
+import { cn, useLockBodyScroll } from "../lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 import NoticeModal from "./NoticeModal";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
+import { Share } from "@capacitor/share";
+import { Clipboard } from "@capacitor/clipboard";
+import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
+import { SystemHelper } from "../lib/systemHelper";
 import { NOTICES } from "../data/notices";
 import packageJson from "../../package.json";
 import { registerBackHandler } from "../lib/backHandler";
@@ -47,6 +51,8 @@ const getLatestVersion = () => {
   const latest = sorted.filter((n) => !n.pinned)[0];
   return latest ? latest.version : packageJson.version;
 };
+
+import BaseModal from "./BaseModal";
 
 interface SettingsProps {
   isDarkMode: boolean;
@@ -209,20 +215,23 @@ export default function Settings({
     let proceed = false;
     try {
       proceed = window.confirm(
-        "선택한 스냅샷으로 데이터를 복원하시겠습니까? 현재 기기의 데이터가 덮어쓰여집니다."
+        t("settings.sync.snapshotRestoreConfirm")
       );
     } catch (e) {
       proceed = true;
     }
     if (proceed) {
       onDataSync(snapshot.data, Date.now());
-      showTemporaryStatus("스냅샷 복원 완료", 3000);
+      showTemporaryStatus(t("settings.sync.snapshotRestoreComplete"), 3000);
     }
   };
 
   const [showResetModal, setShowResetModal] = useState(false);
+  const [showClearLogsModal, setShowClearLogsModal] = useState(false);
   const [showSupportModal, setShowSupportModal] = useState(false);
   const [showNoticeModal, setShowNoticeModal] = useState(false);
+
+  useLockBodyScroll(showClearLogsModal || showResetModal || showSupportModal || showNoticeModal);
 
   useEffect(() => {
     if (showResetModal) {
@@ -275,10 +284,10 @@ export default function Settings({
             </div>
             <div className="flex flex-col text-left">
               <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-0.5">
-                공지사항
+                {t("settings.notice.title")}
               </h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                업데이트 내역 및 주요 소식을 확인하세요
+              <p className="text-[0.6875rem] text-slate-500 dark:text-slate-400">
+                {t("settings.notice.desc")}
               </p>
             </div>
           </div>
@@ -289,7 +298,7 @@ export default function Settings({
       {/* 1. Display */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
         <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
-          <h2 className="text-[13px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+          <h2 className="text-[0.8125rem] font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">
             {t("settings.display.title")}
           </h2>
         </div>
@@ -480,7 +489,7 @@ export default function Settings({
       {/* 2. Data & Sync */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
         <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
-          <h2 className="text-[13px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+          <h2 className="text-[0.8125rem] font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">
             {t("settings.sync.title")}
           </h2>
         </div>
@@ -599,7 +608,7 @@ export default function Settings({
                       <span className="font-bold text-slate-700 dark:text-slate-300">
                         {t("settings.sync.autoStatusTitle")}
                       </span>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      <span className="text-[0.6875rem] text-slate-500 dark:text-slate-400">
                         {t("settings.sync.autoStatusDesc")}
                       </span>
                     </div>
@@ -611,7 +620,7 @@ export default function Settings({
                   <div className="w-full h-px bg-slate-200 dark:bg-slate-700/50" />
 
                   <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between text-[11px]">
+                    <div className="flex items-center justify-between text-[0.6875rem]">
                       <span className="text-slate-500 font-medium whitespace-nowrap">
                         {t("settings.sync.localData")}
                       </span>
@@ -619,7 +628,7 @@ export default function Settings({
                         {new Date(localDataTimestamp).toLocaleString()}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between text-[11px]">
+                    <div className="flex items-center justify-between text-[0.6875rem]">
                       <span className="text-slate-500 font-medium whitespace-nowrap">
                         {t("settings.sync.remoteData")}
                       </span>
@@ -665,7 +674,7 @@ export default function Settings({
                   >
                     <div className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-300">
                       <History className="w-4 h-4 text-orange-500" />
-                      백업 스냅샷
+                      {t("settings.sync.snapshotsTitle")}
                     </div>
                     <ChevronRight
                       className={cn(
@@ -678,11 +687,11 @@ export default function Settings({
                     <div className="px-4 pb-4 flex flex-col gap-2">
                       {isFetchingSnapshots ? (
                         <div className="text-center py-4 text-xs font-medium text-slate-500">
-                          데이터 불러오는 중...
+                          {t("settings.sync.snapshotsLoading")}
                         </div>
                       ) : snapshots.length === 0 ? (
                         <div className="text-center py-4 text-xs font-medium text-slate-500">
-                          저장된 스냅샷이 없습니다.
+                          {t("settings.sync.snapshotsEmpty")}
                         </div>
                       ) : (
                         snapshots.map((snap) => (
@@ -694,7 +703,7 @@ export default function Settings({
                               <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
                                 {new Date(snap.timestamp).toLocaleString()}
                               </span>
-                              <span className="text-[10px] py-0.5 px-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded self-start font-medium">
+                              <span className="text-[0.625rem] py-0.5 px-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded self-start font-medium">
                                 {snap.tag}
                               </span>
                             </div>
@@ -702,7 +711,7 @@ export default function Settings({
                               onClick={() => handleRestoreSnapshot(snap)}
                               className="px-3 py-1.5 text-xs font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
                             >
-                              복원
+                              {t("settings.sync.snapshotRestore")}
                             </button>
                           </div>
                         ))
@@ -743,7 +752,7 @@ export default function Settings({
       {/* 3. Advanced Settings & Support */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
         <div className="px-5 py-3.5 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700">
-          <h2 className="text-[13px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+          <h2 className="text-[0.8125rem] font-black text-slate-800 dark:text-slate-200 uppercase tracking-wider">
             {t("settings.advanced.title")}
           </h2>
         </div>
@@ -753,10 +762,10 @@ export default function Settings({
             <div>
               <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2 mb-1">
                 <Info className="w-4 h-4 text-teal-500" />
-                현재 앱 버전
+                {t("settings.version.title")}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                빌드 및 릴리즈 정보
+                {t("settings.version.desc")}
               </p>
             </div>
             <div className="shrink-0 flex items-center justify-center bg-slate-100 dark:bg-slate-700/50 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 shadow-sm">
@@ -820,38 +829,84 @@ export default function Settings({
             {isLogMode && (
               <div className="flex items-center justify-end gap-3 pt-1">
                 <button
-                  onClick={() => {
-                    let proceed = true;
-                    try {
-                      proceed = window.confirm(
-                        t("settings.devLogs.confirmDelete")
-                      );
-                    } catch (e) {
-                      proceed = true;
-                    }
-                    if (proceed) {
-                      clearLogs();
-                      showTemporaryStatus(t("settings.devLogs.deleted"), 2000);
-                    }
-                  }}
+                  onClick={() => setShowClearLogsModal(true)}
                   className="px-4 py-2 text-xs font-bold text-red-500 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 rounded-xl transition-colors"
                 >
                   {t("settings.devLogs.clear")}
                 </button>
                 <button
-                  onClick={() => {
-                    const logsStr = exportLogsStr();
-                    const blob = new Blob([logsStr], {
-                      type: "application/json",
-                    });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `BrightStudy_Logs_${new Date()
-                      .toISOString()
-                      .slice(0, 10)}.json`;
-                    a.click();
-                    URL.revokeObjectURL(url);
+                  onClick={async () => {
+                    const frontendLogs = exportLogsStr();
+                    let finalLogData = frontendLogs;
+                    
+                    if (Capacitor.isNativePlatform()) {
+                      try {
+                        let nativeLogcat = "";
+                        try {
+                          const { logcat } = await SystemHelper.getLogcat();
+                          nativeLogcat = logcat;
+                        } catch(err) {}
+                        
+                        const fullLogObj = {
+                          appLogs: JSON.parse(frontendLogs || "[]"),
+                          logcat: nativeLogcat
+                        };
+                        finalLogData = JSON.stringify(fullLogObj, null, 2);
+                        
+                        const fileName = `BrightStudy_Logs_${new Date().toISOString().replace(/:/g, '-')}.json`;
+                        
+                        try {
+                           await SystemHelper.saveLogToDownloads({ data: finalLogData, fileName });
+                        } catch(e) {}
+                        
+                        const writeResult = await Filesystem.writeFile({
+                          path: fileName,
+                          data: finalLogData,
+                          directory: Directory.Cache,
+                          encoding: Encoding.UTF8,
+                        });
+                        
+                        await Share.share({
+                          title: "BrightStudy Logs",
+                          url: writeResult.uri,
+                          dialogTitle: "Share Logs"
+                        });
+                      } catch (e) {
+                         // fallback if share or write fails
+                         try {
+                           await Clipboard.write({ string: finalLogData.substring(0, 50000) }); // clipboard has limits
+                           showTemporaryStatus(t("settings.devLogs.copiedToClipboard"), 2000);
+                         } catch (err) {}
+                      }
+                    } else if (typeof window !== 'undefined' && '__TAURI__' in window) {
+                      try {
+                        const { downloadDir, join } = await import('@tauri-apps/api/path');
+                        const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+                        const downloads = await downloadDir();
+                        const fileName = `BrightStudy_Logs_${new Date().toISOString().replace(/:/g, '-')}.json`;
+                        const filePath = await join(downloads, fileName);
+                        await writeTextFile(filePath, finalLogData);
+                        showTemporaryStatus(t("settings.devLogs.export") + " (Downloads)", 2000);
+                      } catch (e) {
+                        console.error('Failed to save log via tauri:', e);
+                        try {
+                          await navigator.clipboard.writeText(finalLogData.substring(0, 50000));
+                          showTemporaryStatus(t("settings.devLogs.copiedToClipboard"), 2000);
+                        } catch (err) {}
+                      }
+                    } else {
+                      const blob = new Blob([finalLogData], {
+                        type: "application/json",
+                      });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `BrightStudy_Logs_${new Date()
+                        .toISOString()
+                        .slice(0, 10)}.json`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }
                   }}
                   className="px-4 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl transition-colors"
                 >
@@ -882,19 +937,41 @@ export default function Settings({
       </div>
 
       {/* Modals */}
-      <AnimatePresence>
-        {showNoticeModal && (
-          <NoticeModal onClose={() => setShowNoticeModal(false)} />
-        )}
-      </AnimatePresence>
+      {showNoticeModal && (
+        <NoticeModal onClose={() => setShowNoticeModal(false)} />
+      )}
 
-      {showResetModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="w-full max-w-sm bg-white dark:bg-slate-800 rounded-3xl p-8 shadow-2xl flex flex-col gap-6"
-          >
+      <BaseModal isOpen={showClearLogsModal} onClose={() => setShowClearLogsModal(false)} className="max-w-sm p-8 flex flex-col gap-6" hideCloseButton={true}>
+            <div>
+              <h3 className="text-xl font-black text-red-600 dark:text-red-400 mb-2">
+                {t("settings.devLogs.clear")}
+              </h3>
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                {t("settings.devLogs.confirmDelete")}
+              </p>
+            </div>
+
+            <div className="flex gap-3 mt-2">
+              <button
+                onClick={() => {
+                  clearLogs();
+                  setShowClearLogsModal(false);
+                  showTemporaryStatus(t("settings.devLogs.deleted"), 2000);
+                }}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition-colors text-sm"
+              >
+                {t("common.delete")}
+              </button>
+              <button
+                onClick={() => setShowClearLogsModal(false)}
+                className="flex-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold py-3 rounded-xl transition-colors text-sm"
+              >
+                {t("common.cancel")}
+              </button>
+            </div>
+      </BaseModal>
+
+      <BaseModal isOpen={showResetModal} onClose={() => setShowResetModal(false)} className="max-w-sm p-8 flex flex-col gap-6" hideCloseButton={true}>
             <div>
               <h3 className="text-xl font-black text-red-600 dark:text-red-400 mb-2">
                 {t("settings.factory.confirmTitle")}
@@ -918,17 +995,9 @@ export default function Settings({
                 {t("common.cancel")}
               </button>
             </div>
-          </motion.div>
-        </div>
-      )}
+      </BaseModal>
 
-      {showSupportModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="w-full max-w-sm bg-white dark:bg-slate-800 rounded-3xl p-8 shadow-2xl flex flex-col gap-6"
-          >
+      <BaseModal isOpen={showSupportModal} onClose={() => setShowSupportModal(false)} className="max-w-sm p-8 flex flex-col gap-6" hideCloseButton={true}>
             <div>
               <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
                 <MessageCircle className="w-6 h-6 text-purple-500" />
@@ -955,9 +1024,7 @@ export default function Settings({
             >
               {t("common.close")}
             </button>
-          </motion.div>
-        </div>
-      )}
+      </BaseModal>
     </div>
   );
 }

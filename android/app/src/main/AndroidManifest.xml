@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- 알림 및 진동 권한 -->
+    <!-- ?Œë¦¼ ë°?ì§„ë�™ ê¶Œí•œ -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -10,17 +10,18 @@
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
-    <!-- 포그라운드 서비스 및 화면 가로채기(다른 앱 위에 그리기) 권한-->
+    <!-- ?¬ê·¸?¼ìš´???œë¹„??ë°??”ë©´ ê°€ë¡œì±„ê¸??¤ë¥¸ ???„ì—� ê·¸ë¦¬ê¸? ê¶Œí•œ-->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <!-- 안드로이드 14 이상 호환을 위해 추가 -->
+    <!-- ?ˆë“œë¡œì�´??14 ?´ìƒ� ?¸í™˜???„í•´ ì¶”ê? -->
 
 
-    <!-- 백그라운드 타이머 정확도 보장을 위한 알람 권한 -->
+    <!-- ë°±ê·¸?¼ìš´???€?´ë¨¸ ?•í™•??ë³´ìž¥???„í•œ ?ŒëžŒ ê¶Œí•œ -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
-    <!-- 재부팅 시 등록된 알람 복구 권한 -->
+    <!-- ?¬ë??????±ë¡�???ŒëžŒ ë³µêµ¬ ê¶Œí•œ -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <application
         android:allowBackup="true"
@@ -45,10 +46,6 @@
             </intent-filter>
         </activity>
 
-        <service android:name=".SystemHelperService" android:foregroundServiceType="specialUse">
-            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="timer" />
-        </service>
-
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -56,6 +53,15 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <service
+            android:name=".TimerForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keep timer running in background with persistent notification" />
+        </service>
     </application>
 
 

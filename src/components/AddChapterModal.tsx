@@ -1,8 +1,8 @@
-import { useState, FormEvent, useEffect } from 'react';
+import { useState, FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Plus, List } from 'lucide-react';
+import { Plus, List } from 'lucide-react';
 import { Book } from '../types';
-import { registerBackHandler } from '../lib/backHandler';
+import BaseModal from './BaseModal';
 
 interface AddChapterModalProps {
   isOpen: boolean;
@@ -17,15 +17,6 @@ export default function AddChapterModal({ isOpen, book, onClose, onAdd }: AddCha
   const [startPage, setStartPage] = useState('');
   const [endPage, setEndPage] = useState('');
 
-  useEffect(() => {
-    if (isOpen) {
-      return registerBackHandler(() => {
-        onClose();
-        return true;
-      });
-    }
-  }, [isOpen, onClose]);
-
   if (!isOpen || !book) return null;
 
   const handleSubmit = (e: FormEvent) => {
@@ -38,18 +29,11 @@ export default function AddChapterModal({ isOpen, book, onClose, onAdd }: AddCha
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 dark:bg-slate-900/80 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl w-full max-w-md border border-slate-100 dark:border-slate-700 animate-in fade-in zoom-in-95 duration-200">
+    <BaseModal isOpen={isOpen} onClose={onClose} className="max-w-md p-6 sm:p-8" zIndex={100}>
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2">
              <List className="w-5 h-5 text-indigo-500" /> {t('chapterModal.title')}
           </h3>
-          <button 
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 dark:hover:text-slate-300 rounded-xl transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         <div className="mb-4 text-sm font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-lg">
@@ -99,7 +83,6 @@ export default function AddChapterModal({ isOpen, book, onClose, onAdd }: AddCha
              </button>
           </div>
         </form>
-      </div>
-    </div>
+    </BaseModal>
   );
 }
